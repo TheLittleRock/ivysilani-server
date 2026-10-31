@@ -1,5 +1,6 @@
 import urllib.parse
 import logging
+from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, Response, Query
 from fastapi.responses import JSONResponse, FileResponse
@@ -37,8 +38,8 @@ async def proxy_subtitles(url: str = Query(...)):
         raise HTTPException(status_code=502, detail="Subtitle proxy error")
 
 @router.get("/image-proxy")
-async def get_image_proxy(url: str):
-    content, media_type = await image_proxy.fetch_image(url)
+async def get_image_proxy(url: str, pad: Optional[str] = Query(None)):
+    content, media_type = await image_proxy.fetch_image(url, pad=pad)
     if not content:
         fallback = Path("app/static/logos/ct1.png")
         if fallback.exists():

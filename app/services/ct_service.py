@@ -2,7 +2,8 @@ import time
 import re
 import json
 import logging
-from typing import Dict, List, Optional, Any
+from datetime import datetime
+from typing import Dict, List, Optional, Any, Tuple
 import httpx
 from bs4 import BeautifulSoup
 
@@ -144,35 +145,64 @@ CHANNEL_KEY_MAP = {
     "ctsportplus8": "CH_32", "i32": "CH_32", "32": "CH_32", "ch_32": "CH_32", "CH_32": "CH_32",
 }
 
-def parse_season_number(title: str, default: int = 1) -> int:
-    """Extrahuje číslo řady z popisku např. 'I. řada', '2. série', 'XIII. řada'."""
-    if not title:
-        return default
-    m_num = re.search(r"\b(\d+)\b", title)
+ROMAN_NUMERALS = {
+    "i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7,
+    "viii": 8, "ix": 9, "x": 10, "xi": 11, "xii": 12, "xiii": 13,
+    "xiv": 14, "xv": 15, "xvi": 16, "xvii": 17, "xviii": 18, "xix": 19, "xx": 20
+}
+
+def clean_episode_title(raw_title: str) -> Tuple[Optional[int], str]:
+    """Extrahuje číslo epizody z prefixu (např. '1/13 Ztracený případ' -> (1, 'Ztracený případ'))."""
+    if not raw_title:
+        return None, ""
+    clean = raw_title.replace("\xa0", " ").strip()
+    m = re.match(r"^(\d+)/\d+\s+(.+)$", clean)
+    if m:
+        return int(m.group(1)), m.group(2).strip()
+    return None, clean
+
+def parse_season_number(season_title: str, ep_title: str = "", default: int = 1) -> int:
+    """Extrahuje číslo řady z popisku např. 'I. řada', 'StarDance XIV (2026)', 'Osudy', 'Filmy o seriálu'."""
+    s = (season_title or "").replace("\xa0", " ").strip().lower()
+    t = (ep_title or "").replace("\xa0", " ").strip().lower()
+
+    # 1. Speciály a bonusové materiály -> Série 0
+    if any(b in s or b in t for b in ["film o ", "filmy o ", "bonus", "kolem dokola", "videochat", "speciál", "tiskov", "zákulis", "tour"]):
+        return 0
+    # 2. Vyprávěj Osudy -> Série 6
+    if "osudy" in s or "osudy" in t:
+        return 6
+    # 3. Číselné označení: '1. řada', '2. série'
+    m_num = re.search(r"(\d+)\.\s*(?:řada|série)", s)
     if m_num:
         return int(m_num.group(1))
-    m_roman = re.search(r"\b([IVXLC]+)\b", title.upper())
-    if m_roman:
-        roman_map = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
-        clean = m_roman.group(1)
-        total, prev = 0, 0
-        for c in reversed(clean):
-            val = roman_map.get(c, 0)
-            if val < prev:
-                total -= val
-            else:
-                total += val
-                prev = val
-        return max(1, total)
+    # 4. Římské číslice: 'I. řada', 'IV. řada'
+    m_roman = re.search(r"\b([ivx]+)\.\s*(?:řada|série)", s)
+    if m_roman and m_roman.group(1) in ROMAN_NUMERALS:
+        return ROMAN_NUMERALS[m_roman.group(1)]
+    # 5. StarDance: 'StarDance XIV'
+    m_sd = re.search(r"stardance\s+([ivx]+)", s) or re.search(r"stardance\s+([ivx]+)", t)
+    if m_sd and m_sd.group(1) in ROMAN_NUMERALS:
+        return ROMAN_NUMERALS[m_sd.group(1)]
+    # 6. Rok v závorce: '(2026)'
+    m_yr = re.search(r"\((\d{4})\)", s)
+    if m_yr:
+        return int(m_yr.group(1))
+
+    # Základní fallback
+    m_basic = re.search(r"\b(\d+)\b", s)
+    if m_basic:
+        return int(m_basic.group(1))
+
     return default
 
 def parse_episode_number(title: str, default: int = 1) -> int:
     """Extrahuje číslo dílu z názvu např. '1/26 Od začátku', 'Díl 5' apod."""
     if not title:
         return default
-    m_slash = re.search(r"^(\d+)\s*/\s*\d+", title)
-    if m_slash:
-        return int(m_slash.group(1))
+    num, _ = clean_episode_title(title)
+    if num is not None:
+        return num
     m_num = re.search(r"\b(?:díl|epizoda|část)?\s*(\d+)\b", title, re.IGNORECASE)
     if m_num:
         return int(m_num.group(1))
@@ -541,7 +571,34 @@ class CTService:
 
                 data = json.loads(match.group(1))
                 page_data = data.get("props", {}).get("pageProps", {}).get("data", {})
+                apollo_state = data.get("props", {}).get("apolloState", {})
+                root_query = apollo_state.get("ROOT_QUERY", {})
+
+                # Hledání hexadecimálního programmeId pro GraphQL
+                programme_id = None
+                for k in root_query:
+                    m_prog = re.search(r'programme\(\{"programmeId":"([a-f0-9]+)"\}\)', k)
+                    if m_prog:
+                        programme_id = m_prog.group(1)
+                        break
+
                 prog = page_data.get("programme")
+                if not prog:
+                    # Zkusíme dohledat Show z apolloState
+                    for k, v in apollo_state.items():
+                        if k.startswith("Show:") and isinstance(v, dict) and v.get("title"):
+                            prog = {
+                                "id": str(v.get("id") or slug),
+                                "title": v.get("title"),
+                                "slug": v.get("slug") or slug,
+                                "description": v.get("shortDescription") or v.get("description") or "",
+                                "year": v.get("year"),
+                                "showType": v.get("showType", "series"),
+                                "isPlayable": v.get("playable", True),
+                                "images": v.get("images", {})
+                            }
+                            break
+
                 if not prog:
                     ep_data = page_data.get("episode")
                     if ep_data:
@@ -558,17 +615,20 @@ class CTService:
                         return None
 
                 show_id = str(prog.get("id") or slug)
-                programme_id = str(prog.get("programmeId") or show_id)
+                if not programme_id:
+                    programme_id = str(prog.get("programmeId") or show_id)
+
                 title = prog.get("title", "")
                 description = prog.get("description") or prog.get("shortDescription") or ""
                 year = str(prog.get("year") or "")
 
-                raw_type = prog.get("showType", "")
-                seasons_list = prog.get("seasons", [])
-                show_type = "movie" if raw_type == "movie" or (not seasons_list and prog.get("idec")) else "series"
+                raw_type = (prog.get("showType") or "").lower()
+                seasons_from_apollo = [v for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") == "Season"]
+                seasons_list = prog.get("seasons", []) or seasons_from_apollo
+                show_type = "movie" if raw_type == "movie" or ("film" in raw_type) or (not seasons_list and prog.get("idec")) else "series"
                 is_playable = bool(prog.get("isPlayable", True))
 
-                # Extrahe obrázků různých typů
+                # Extrakce obrázků různých typů
                 images = prog.get("images", {})
                 hero_imgs = images.get("heroWithFallback", {}) or {}
                 backdrop_url = (
@@ -596,36 +656,113 @@ class CTService:
 
                 # Žánry
                 genres = [g["title"] for g in prog.get("flatGenres", []) if isinstance(g, dict) and "title" in g]
-                genre = ", ".join(genres) if genres else "Archiv"
+                if not genres:
+                    genres = [v.get("title") for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") in ["FlatGenre", "CardGenre"] and v.get("title")]
+                genre = ", ".join(list(dict.fromkeys(genres))[:3]) if genres else "Archiv"
 
                 episodes = []
 
-                if show_type == "series":
-                    # Pro seriál načteme všechny reálné epizody přes GraphQL GetEpisodes
-                    # 1. Zkusíme načíst celou sérii bez season filtru (až 100 dílů)
-                    gql_episodes = await self.get_episodes_for_programme(programme_id, limit=50, offset=0)
-                    if len(gql_episodes) == 50:
-                        # Druhá stránka pro dlouhé seriály
-                        page2 = await self.get_episodes_for_programme(programme_id, limit=50, offset=50)
-                        gql_episodes.extend(page2)
-                        if len(page2) == 50:
-                            page3 = await self.get_episodes_for_programme(programme_id, limit=50, offset=100)
-                            gql_episodes.extend(page3)
+                # Kontrola denních zpravodajských pořadů (např. Události, Události za okamžik a počasí)
+                ep_previews = [v for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") == "EpisodePreview"]
+                has_datetime_previews = any(p.get("date", {}).get("datetime") for p in ep_previews)
+                has_season_series = any('řada' in (s.get('title') or '').lower() or 'stardance' in (s.get('title') or '').lower() for s in seasons_list)
 
-                    # Pokud bez season filtru nic nepřišlo a máme seasons_list, zkusíme jednotlivé řady
-                    if not gql_episodes and seasons_list:
+                is_daily_news = (
+                    any(slug.startswith(x) for x in ['1097181328-udalosti', '10393496397-udalosti-za-okamzik-a-pocasi', '1097181328', '10393496397'])
+                    or (has_datetime_previews and not has_season_series and any(k in genre.lower() for k in ['zpravodaj', 'publicist']))
+                )
+
+                if show_type == "series" and is_daily_news and len(ep_previews) >= 1:
+                    # Denní pořad jako Události, Události za okamžik apod.
+                    # Řadíme od nejnovějšího k nejstaršímu
+                    sorted_previews = sorted(
+                        ep_previews,
+                        key=lambda p: p.get("date", {}).get("datetime") or "",
+                        reverse=True
+                    )
+                    seen_idecs = set()
+                    for idx, p in enumerate(sorted_previews, start=1):
+                        p_idec = str(p.get("id") or "")
+                        if not p_idec or p_idec in seen_idecs:
+                            continue
+                        seen_idecs.add(p_idec)
+
+                        dt_str = p.get("date", {}).get("datetime") or ""
+                        season_val = 1
+                        ep_clean_title = p.get("title") or title
+                        if dt_str:
+                            try:
+                                dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                                season_val = dt.year
+                                ep_clean_title = f"{dt.day}. {dt.month}. {dt.year}: {title}"
+                            except Exception:
+                                pass
+
+                        p_imgs = p.get("images") or {}
+                        p_img = p_imgs.get("card({\"height\":270,\"width\":480})") or image_url
+
+                        episodes.append({
+                            "id": f"{show_id}_{p_idec}",
+                            "idec": p_idec,
+                            "title": ep_clean_title,
+                            "description": p.get("description") or description,
+                            "image_url": p_img,
+                            "duration": p.get("duration", 0),
+                            "season": season_val,
+                            "episode_num": idx,
+                            "is_playable": bool(p.get("playable", True)),
+                            "is_drm": False
+                        })
+
+                elif show_type == "series":
+                    gql_episodes = []
+
+                    # Pokud máme seznam řad (seasons_list), projdeme každou řadu zvlášť
+                    if seasons_list and programme_id:
                         for s_item in seasons_list:
                             s_id = s_item.get("id")
+                            s_title = s_item.get("title") or ""
                             if s_id:
                                 s_eps = await self.get_episodes_for_programme(programme_id, season_id=s_id, limit=50)
+                                s_num = parse_season_number(s_title, default=1)
+                                for ep_item in s_eps:
+                                    ep_item["_resolved_season"] = s_num
                                 gql_episodes.extend(s_eps)
 
+                    # Pokud nic nepřišlo po řadách nebo řady nebyly definovány, zkusíme bez filtru
+                    if not gql_episodes and programme_id:
+                        page1 = await self.get_episodes_for_programme(programme_id, limit=50, offset=0)
+                        gql_episodes.extend(page1)
+                        if len(page1) == 50:
+                            page2 = await self.get_episodes_for_programme(programme_id, limit=50, offset=50)
+                            gql_episodes.extend(page2)
+                            if len(page2) == 50:
+                                page3 = await self.get_episodes_for_programme(programme_id, limit=50, offset=100)
+                                gql_episodes.extend(page3)
+
+                    seen_ep_ids = set()
                     for idx, ep_item in enumerate(gql_episodes, start=1):
                         ep_idec = str(ep_item.get("id") or "")
-                        ep_title = ep_item.get("title") or f"Epizoda {idx}"
+                        if not ep_idec or ep_idec in seen_ep_ids:
+                            continue
+                        seen_ep_ids.add(ep_idec)
+
+                        raw_ep_title = ep_item.get("title") or f"Epizoda {idx}"
+                        clean_num, clean_name = clean_episode_title(raw_ep_title)
+                        ep_title = clean_name
+
                         ep_season_title = (ep_item.get("season") or {}).get("title", "")
-                        season_num = parse_season_number(ep_season_title, default=1)
-                        ep_num = parse_episode_number(ep_title, default=idx)
+                        resolved_season = ep_item.get("_resolved_season")
+                        if resolved_season is not None:
+                            season_num = resolved_season
+                        else:
+                            season_num = parse_season_number(ep_season_title, ep_title=raw_ep_title, default=1)
+
+                        if clean_num is not None:
+                            ep_num = clean_num
+                        else:
+                            ep_num = parse_episode_number(raw_ep_title, default=idx)
+
                         ep_imgs = ep_item.get("images") or {}
                         ep_img = ep_imgs.get("card") or image_url
 

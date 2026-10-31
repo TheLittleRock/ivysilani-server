@@ -68,11 +68,17 @@
                 </div>
             </div>
 
-            <div class="flex items-center space-x-3 self-end sm:self-auto">
+            <div class="flex flex-wrap items-center gap-2.5 self-end sm:self-auto">
                 <button id="btn-crawl-catalog" onclick="triggerCrawl()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2 shadow">
                     <i class="fa-solid fa-arrows-rotate" id="crawl-spinner"></i>
-                    <span id="crawl-btn-text">Spustit plnou indexaci</span>
+                    <span id="crawl-btn-text">Spustit indexaci</span>
                 </button>
+                <form method="POST" action="/admin/reset-catalog" onsubmit="return confirm('Pozor! Tato akce vymaže všechny pořady a epizody z databáze a spustí plnou reindexaci od nuly. Účty a IPTV tokeny zůstanou zachovány. Chcete pokračovat?')" class="inline">
+                    <button type="submit" class="bg-red-600/90 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2 shadow">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Vyprázdnit databázi & reindexovat</span>
+                    </button>
+                </form>
             </div>
         </div>
 
@@ -225,6 +231,36 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- 5. Systémový Log v reálném čase -->
+    <div id="system-logs" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-lg shrink-0">
+                    <i class="fa-solid fa-terminal"></i>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-white">Systémový log v reálném čase</h2>
+                    <p class="text-xs text-slate-400">Rotující záznam událostí serveru (<code class="text-purple-400">data/logs/ivysilani.log</code>, rotace 10 MB).</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2.5">
+                <button onclick="fetchLogs()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 border border-slate-700" title="Obnovit log">
+                    <i class="fa-solid fa-arrows-rotate text-xs"></i>
+                    <span>Obnovit</span>
+                </button>
+                <a href="/admin/logs/download" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 shadow" title="Stáhnout log soubor">
+                    <i class="fa-solid fa-download text-xs"></i>
+                    <span>Stáhnout log</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="bg-slate-950 rounded-xl border border-slate-800/80 p-3 font-mono text-[11px] leading-relaxed text-slate-300 max-h-96 overflow-y-auto whitespace-pre-wrap select-all custom-scrollbar" id="log-console">
+            Načítám záznamy z logu...
         </div>
     </div>
 
@@ -397,5 +433,26 @@
             statusMsg.className = 'text-[11px] text-red-400';
         }
     }
+
+    async function fetchLogs() {
+        const consoleEl = document.getElementById('log-console');
+        if (!consoleEl) return;
+        try {
+            const resp = await fetch('/admin/logs/view?lines=250');
+            if (resp.ok) {
+                const text = await resp.text();
+                consoleEl.textContent = text || 'Log je prázdný.';
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+        } catch (e) {
+            console.error('Chyba při stahování logů:', e);
+        }
+    }
+
+    // Automatická periodická obnova logu každé 3 sekundy
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchLogs();
+        setInterval(fetchLogs, 3000);
+    });
 </script>
 {% endblock %}

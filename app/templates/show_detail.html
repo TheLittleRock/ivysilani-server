@@ -15,8 +15,8 @@
 
     <!-- Přehrávač Shaka Player UI (pokud je spuštěno video) -->
     <div id="player-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hidden">
-        <div id="vod-player-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner" data-shaka-player-container>
-            <video id="vod-video" class="w-full h-full" playsinline data-shaka-player></video>
+        <div id="vod-player-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner">
+            <video id="vod-video" class="w-full h-full" playsinline></video>
         </div>
         <div class="mt-3 pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -59,16 +59,16 @@
 
     <!-- Karta pořadu / filmu -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row gap-6 relative overflow-hidden">
-        <!-- Pozadí (backdrop) jemně prosvítající -->
+        <!-- Pozadí (backdrop) jemně prosvítající s rozostřením proti pixelaci -->
         {% if show.backdrop_url %}
-        <div class="absolute inset-0 opacity-10 bg-cover bg-center pointer-events-none" style="background-image: url('{{ show.backdrop_url }}');"></div>
+        <div class="absolute inset-0 opacity-15 bg-cover bg-center pointer-events-none filter blur-sm scale-105" style="background-image: url('{{ show.backdrop_url }}');"></div>
         {% endif %}
 
-        <!-- Obrázek / Plakát -->
+        <!-- Obrázek / Plakát (bez ořezu v poměru 2:3) -->
         <div class="w-full md:w-64 flex-shrink-0 z-10">
-            <div class="aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-950 shadow-md border border-slate-800">
+            <div class="aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-950 shadow-md border border-slate-800 flex items-center justify-center">
                 {% if show.poster_url or show.image_url %}
-                <img src="{{ show.poster_url or show.image_url }}" alt="{{ show.title }}" class="w-full h-full object-cover" />
+                <img src="{{ show.poster_url or show.image_url }}" alt="{{ show.title }}" class="w-full h-full object-contain" />
                 {% else %}
                 <div class="w-full h-full flex items-center justify-center text-slate-700 text-4xl">
                     <i class="fa-solid fa-film"></i>

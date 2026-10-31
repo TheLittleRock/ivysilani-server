@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.logging_config import setup_logging
 from app.db.database import init_db
 from app.services.downloader import download_manager
 from app.services.archive_crawler import archive_crawler
@@ -16,10 +17,7 @@ from app.api.xtream import router as xtream_router
 from app.api.stream import router as stream_router
 from app.api.stremio import router as stremio_router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
+setup_logging()
 logger = logging.getLogger("ivysilani")
 
 @asynccontextmanager
@@ -63,6 +61,13 @@ app.add_middleware(
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico():
+    fav = STATIC_DIR / "favicon.ico"
+    if fav.exists():
+        return FileResponse(str(fav), media_type="image/x-icon")
+    return Response(status_code=404)
 
 # Registrace routerů
 app.include_router(stream_router)

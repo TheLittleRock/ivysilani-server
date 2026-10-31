@@ -115,6 +115,26 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
 
 # --- Správa pořadů a epizod (VOD Katalog) ---
 
+def clear_catalog():
+    """Vymaže všechny pořady a epizody z databáze a provede VACUUM.
+    Uživatelské účty a nastavení zůstávají zachovány.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM episodes")
+        cursor.execute("DELETE FROM shows")
+        conn.commit()
+        cursor.execute("VACUUM")
+
+def delete_show(show_id: str) -> bool:
+    """Odstraní pořad a všechny jeho epizody z databáze (např. při expiraci vysílacích práv)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM episodes WHERE show_id = ?", (show_id,))
+        cursor.execute("DELETE FROM shows WHERE id = ?", (show_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
 def upsert_show(
     show_id: str,
     title: str,

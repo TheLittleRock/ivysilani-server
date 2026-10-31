@@ -83,7 +83,7 @@
             <!-- Plakát / Náhled -->
             <div class="aspect-[2/3] w-full bg-slate-950 relative overflow-hidden">
                 {% if s.poster_url or s.image_url %}
-                <img src="{{ s.poster_url or s.image_url }}" alt="{{ s.title }}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" loading="lazy" />
+                <img src="{{ s.poster_url or s.image_url }}" alt="{{ s.title }}" class="w-full h-full object-contain bg-slate-950 group-hover:scale-105 transition duration-300" loading="lazy" />
                 {% else %}
                 <div class="w-full h-full flex items-center justify-center text-slate-700 text-3xl">
                     <i class="fa-solid fa-film"></i>

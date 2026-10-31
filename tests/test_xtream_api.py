@@ -80,6 +80,19 @@ def test_get_m3u_playlist():
     assert "catchup-days=\"14\"" in response.text
     assert "/static/logos/ct1.png" in response.text
 
+def test_get_m3u_playlist_token():
+    from app.db import crud
+    user = crud.get_user_by_username("admin")
+    token = user.get("user_token")
+    response = client.get(f"/get.php?token={token}&type=m3u_plus")
+    assert response.status_code == 200
+    assert "#EXTM3U" in response.text
+    assert f"/live/{token}/1.m3u8" in response.text
+    assert f"xmltv.php?token={token}" in response.text
+    # Overime, ze M3U playlist obsahuje presne 14 zivych stanic CT bez nahodnych VOD poradu
+    extinf_lines = [l for l in response.text.splitlines() if l.startswith("#EXTINF:")]
+    assert len(extinf_lines) == 14
+
 def test_xmltv_epg():
     response = client.get("/xmltv.php?username=admin&password=admin")
     assert response.status_code == 200
@@ -94,8 +107,10 @@ def test_stremio_manifest():
     assert data["id"] == "cz.thelittlerock.ivysilani"
     assert "iVysílání" in data["name"]
     catalogs = data["catalogs"]
-    assert any(c["id"] == "ct_live" for c in catalogs)
+    # Zive vysilani je vyrazeno ze Stremio doplňku dle zadani
+    assert not any(c["id"] == "ct_live" for c in catalogs)
     assert any(c["id"] == "ct_series" for c in catalogs)
+    assert any(c["id"] == "ct_movies" for c in catalogs)
 
 def test_stremio_live_catalog():
     response = client.get("/stremio/catalog/tv/ct_live.json")
@@ -137,12 +152,9 @@ def test_stremio_tokenized_manifest_and_catalogs():
     assert "/static/logos/ct1.png" in data["logo"]
     catalogs = data["catalogs"]
     catalog_ids = [c["id"] for c in catalogs]
-    assert "ct_live" in catalog_ids
+    assert "ct_live" not in catalog_ids
     assert "ct_series" in catalog_ids
     assert "ct_movies" in catalog_ids
-    assert "ct_entertainment" in catalog_ids
-    assert "ct_documentaries" in catalog_ids
-    assert "ct_kids" in catalog_ids
 
     # Test tokenized stream
     stream_resp = client.get(f"/stremio/{token}/stream/tv/ct_live_CH_1.json")

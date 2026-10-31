@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.db import crud
-from app.services.ct_service import ct_service, LIVE_CHANNELS
+from app.services.ct_service import ct_service, clean_episode_title, LIVE_CHANNELS
 from app.services.image_proxy import image_proxy
 from app.services.tmdb_service import tmdb_service
 from app.api.xtream import CHANNEL_STREAM_MAP, CHANNEL_ID_TO_STREAM_ID
@@ -66,20 +66,15 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
     token_suffix = f"/{token}" if token else ""
     return {
         "id": "cz.thelittlerock.ivysilani",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "name": "Česká televize (iVysílání)",
-        "description": "Oficiální kanály živého vysílání (ČT1, ČT2, ČT24, ČT sport...) a kompletní archiv iVysílání.",
+        "description": "Kompletní filmový a seriálový archiv České televize (iVysílání) s českým dabingem a titulky.",
         "logo": f"{base_url}/static/logos/ct1.png",
         "background": f"{base_url}/static/logos/ct1.png",
         "resources": ["catalog", "meta", "stream"],
-        "types": ["tv", "series", "movie"],
+        "types": ["series", "movie"],
         "idPrefixes": ["ct_", "tt", "tmdb:"],
         "catalogs": [
-            {
-                "type": "tv",
-                "id": "ct_live",
-                "name": "ČT Živé vysílání"
-            },
             {
                 "type": "series",
                 "id": "ct_series",
@@ -88,7 +83,7 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                     {
                         "name": "genre",
                         "options": [
-                            "Přehled", "Krimi", "Komedie", "České", "Zahraniční", "Rodinné",
+                            "Přehled", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
                             "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
                         ]
                     },
@@ -104,7 +99,7 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                     {
                         "name": "genre",
                         "options": [
-                            "Přehled", "Krimi", "Komedie", "Zahraniční", "České", "Pohádky",
+                            "Přehled", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
                             "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
                             "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
                             "Válečné", "Studentské"
@@ -246,7 +241,7 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
         poster_url = s.get("tmdb_poster")
         if not poster_url:
             poster_raw = s.get("poster_url") or s.get("image_url")
-            poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+            poster_url = image_proxy.build_proxy_url(base_url, poster_raw, pad="2x3")
 
         backdrop_url = s.get("tmdb_backdrop")
         if not backdrop_url:
@@ -344,7 +339,7 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
         poster_url = show.get("tmdb_poster")
         if not poster_url:
             poster_raw = show.get("poster_url") or show.get("image_url")
-            poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+            poster_url = image_proxy.build_proxy_url(base_url, poster_raw, pad="2x3")
 
         backdrop_url = show.get("tmdb_backdrop")
         if not backdrop_url:
@@ -379,9 +374,12 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
                     base_url,
                     ep.get("image_url") or show.get("image_url")
                 )
+                _, clean_name = clean_episode_title(ep.get("title") or "")
+                ep_clean_title = clean_name or ep.get("title") or show["title"]
+
                 videos.append({
                     "id": f"ct_ep_{ep['idec']}",
-                    "title": ep.get("title") or show["title"],
+                    "title": ep_clean_title,
                     "season": ep.get("season", 1),
                     "episode": ep.get("episode_num", 1),
                     "overview": ep.get("description", show.get("description", "")),

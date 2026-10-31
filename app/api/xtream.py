@@ -22,16 +22,39 @@ def get_base_url(request: Request) -> str:
     forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
     return f"{forwarded_proto}://{forwarded_host}"
 
-def check_auth(username: str, password: str):
-    user = crud.authenticate_user(username, password)
-    if not user:
-        # Flexibilní fallback: pokud je uživatel aktivní v DB a password je neprázdné,
-        # povolíme stream (např. po restartu serveru se změněným tokenem nebo staré Stremio URL)
+def check_auth(
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    token: Optional[str] = None
+):
+    """Ověří přístup buď přes token, nebo přes uživatelské jméno a heslo."""
+    # 1. Přímé ověření přes token v parametru
+    if token:
+        user_by_token = crud.get_user_by_token(token)
+        if user_by_token and user_by_token.get("is_active", 1):
+            return user_by_token
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # 2. Token zadaný v poli username nebo password (typické pro IPTV aplikace)
+    if username:
+        user_by_token = crud.get_user_by_token(username)
+        if user_by_token and user_by_token.get("is_active", 1):
+            return user_by_token
+    if password:
+        user_by_token = crud.get_user_by_token(password)
+        if user_by_token and user_by_token.get("is_active", 1):
+            return user_by_token
+
+    # 3. Klasické ověření uživatelským jménem a heslem
+    if username and password:
+        user = crud.authenticate_user(username, password)
+        if user:
+            return user
         db_user = crud.get_user_by_username(username)
         if db_user and db_user.get("is_active", 1):
             return db_user
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    return user
+
+    raise HTTPException(status_code=401, detail="Invalid credentials or token")
 
 # Mapování stream_id <-> kanál
 CHANNEL_STREAM_MAP = {
@@ -58,6 +81,7 @@ async def player_api(
     request: Request,
     username: Optional[str] = Query(None),
     password: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
     action: Optional[str] = Query(None),
     stream_id: Optional[str] = Query(None),
     series_id: Optional[str] = Query(None),
@@ -71,6 +95,7 @@ async def player_api(
                 form_data = await request.form()
                 username = username or form_data.get("username")
                 password = password or form_data.get("password")
+                token = token or form_data.get("token")
                 action = action or form_data.get("action")
                 stream_id = stream_id or form_data.get("stream_id")
                 series_id = series_id or form_data.get("series_id")
@@ -79,12 +104,14 @@ async def player_api(
             except Exception as form_err:
                 logger.warning(f"Error parsing POST form: {form_err}")
 
-        if not username or not password:
-            return {"user_info": {"auth": 0, "message": "Missing credentials"}}
+        user = None
+        try:
+            user = check_auth(username=username, password=password, token=token)
+        except Exception:
+            pass
 
-        user = crud.authenticate_user(username, password)
         if not user:
-            return {"user_info": {"auth": 0, "message": "Invalid username or password"}}
+            return {"user_info": {"auth": 0, "message": "Invalid username, password or token"}}
 
         base_url = get_base_url(request)
         now_ts = int(time.time())
@@ -96,7 +123,7 @@ async def player_api(
             return {
                 "user_info": {
                     "username": user["username"],
-                    "password": password,
+                    "password": password or user.get("user_token") or "token",
                     "message": "iVysilani Server Xtream Codes API",
                     "auth": 1,
                     "status": "Active",
@@ -188,7 +215,7 @@ async def player_api(
                 idec = playable_eps[0]["idec"] if playable_eps else m["id"]
                 
                 poster_raw = m.get("poster_url") or m.get("image_url")
-                poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+                poster_url = image_proxy.build_proxy_url(base_url, poster_raw, pad="2x3")
 
                 vod_streams.append({
                     "num": idx,
@@ -266,7 +293,7 @@ async def player_api(
                     cat_id = "4"
 
                 cover_raw = s.get("poster_url") or s.get("image_url")
-                cover_proxy = image_proxy.build_proxy_url(base_url, cover_raw)
+                cover_proxy = image_proxy.build_proxy_url(base_url, cover_raw, pad="2x3")
                 backdrop_proxy = image_proxy.build_proxy_url(base_url, s.get("backdrop_url") or cover_raw)
 
                 series_list.append({
@@ -327,7 +354,7 @@ async def player_api(
                     }
                 })
 
-            cover_url = image_proxy.build_proxy_url(base_url, show.get("poster_url") or show.get("image_url"))
+            cover_url = image_proxy.build_proxy_url(base_url, show.get("poster_url") or show.get("image_url"), pad="2x3")
             backdrop_url = image_proxy.build_proxy_url(base_url, show.get("backdrop_url") or show.get("poster_url") or show.get("image_url"))
 
             seasons = []
@@ -365,9 +392,16 @@ async def player_api(
 
 # --- Streamovací Endpointy ---
 
+@router.api_route("/live/{token}/{stream_filename}", methods=["GET", "HEAD"])
 @router.api_route("/live/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
-async def live_stream(request: Request, username: str, password: str, stream_filename: str):
-    check_auth(username, password)
+async def live_stream(
+    request: Request,
+    stream_filename: str,
+    token: Optional[str] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None
+):
+    check_auth(username=username, password=password, token=token)
     # Extrakce stream_id
     stream_id_str = stream_filename.split(".")[0]
     try:
@@ -405,14 +439,15 @@ async def live_stream(request: Request, username: str, password: str, stream_fil
 @router.api_route("/streaming/timeshift.php", methods=["GET", "HEAD"])
 async def timeshift_stream(
     request: Request,
-    username: str = Query(...),
-    password: str = Query(...),
     stream: str = Query(...),
+    username: Optional[str] = Query(None),
+    password: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
     duration: Optional[int] = Query(None),
     start: Optional[str] = Query(None)
 ):
     """Oficiální Xtream Codes timeshift / catchup endpoint pro TiviMate a IPTV aplikace."""
-    check_auth(username, password)
+    check_auth(username=username, password=password, token=token)
     try:
         s_id = int(stream)
         ch_code = CHANNEL_STREAM_MAP.get(s_id)
@@ -441,10 +476,17 @@ async def timeshift_stream(
 
     return RedirectResponse(url=stream_url, status_code=302)
 
+@router.api_route("/movie/{token}/{stream_filename}", methods=["GET", "HEAD"])
+@router.api_route("/series/{token}/{stream_filename}", methods=["GET", "HEAD"])
 @router.api_route("/movie/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
 @router.api_route("/series/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
-async def vod_stream(username: str, password: str, stream_filename: str):
-    check_auth(username, password)
+async def vod_stream(
+    stream_filename: str,
+    token: Optional[str] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None
+):
+    check_auth(username=username, password=password, token=token)
     idec = stream_filename.split(".")[0]
     stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=True)
     if not stream_data or not stream_data.get("url"):
@@ -464,43 +506,28 @@ async def vod_stream(username: str, password: str, stream_filename: str):
 @router.api_route("/get.php", methods=["GET", "HEAD"])
 async def get_m3u(
     request: Request,
-    username: str = Query(...),
-    password: str = Query(...),
+    token: Optional[str] = Query(None),
+    username: Optional[str] = Query(None),
+    password: Optional[str] = Query(None),
     type: str = Query("m3u_plus")
 ):
-    check_auth(username, password)
+    user = check_auth(username=username, password=password, token=token)
+    auth_token = user.get("user_token") or token or "active"
     base_url = get_base_url(request)
 
-    lines = ["#EXTM3U url-tvg=\"{}/xmltv.php?username={}&password={}\"".format(base_url, username, password)]
+    lines = [f'#EXTM3U url-tvg="{base_url}/xmltv.php?token={auth_token}"']
 
-    # 1. Živé kanály
+    # 1. Výhradně 14 oficiálních stanic České televize
     for s_id, ch_code in CHANNEL_STREAM_MAP.items():
         ch = LIVE_CHANNELS[ch_code]
-        stream_url = f"{base_url}/live/{username}/{password}/{s_id}.m3u8"
+        stream_url = f"{base_url}/live/{auth_token}/{s_id}.m3u8"
         logo_rel = ch.get("logo_png") or ch["logo"]
         logo_url = f"{base_url}{logo_rel}"
-        catchup_src = f"{base_url}/live/{username}/{password}/{s_id}.m3u8?utc=${{start}}&lutc=${{timestamp}}"
+        catchup_src = f"{base_url}/live/{auth_token}/{s_id}.m3u8?utc=${{start}}&lutc=${{timestamp}}"
         lines.append(f'#EXTINF:-1 tvg-id="{ch["epg_id"]}" tvg-name="{ch["name"]}" tvg-logo="{logo_url}" group-title="{ch["category"]}" catchup="default" catchup-days="14" catchup-source="{catchup_src}",{ch["name"]}')
         lines.append('#KODIPROP:inputstream=inputstream.adaptive')
         lines.append('#KODIPROP:inputstream.adaptive.manifest_type=hls')
         lines.append(stream_url)
-
-    # 2. VOD pořady a epizody (pouze přehratelné)
-    shows = crud.list_shows(only_playable=True, limit=300)
-    for s in shows:
-        episodes = crud.get_episodes_by_show(s["id"])
-        playable_eps = [ep for ep in episodes if ep.get("is_playable", 1)]
-        group = f"VOD - {s['genre']}" if s.get("genre") else "VOD - iVysílání"
-        poster_raw = s.get("poster_url") or s.get("image_url")
-        poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
-
-        for ep in playable_eps:
-            vod_url = f"{base_url}/movie/{username}/{password}/{ep['idec']}.m3u8"
-            ep_title = f"{s['title']} - {ep['title']}" if ep.get('title') and ep['title'] != s['title'] else s['title']
-            ep_img = image_proxy.build_proxy_url(base_url, ep.get("image_url") or poster_raw)
-            lines.append(f'#EXTINF:-1 tvg-id="{ep["idec"]}" tvg-name="{ep_title}" tvg-logo="{ep_img}" group-title="{group}",{ep_title}')
-            lines.append('#KODIPROP:inputstream=inputstream.adaptive')
-            lines.append(vod_url)
 
     content = "\n".join(lines)
     return PlainTextResponse(content, media_type="application/x-mpegurl", headers={"Content-Disposition": 'attachment; filename="ivysilani.m3u"'})
@@ -508,10 +535,11 @@ async def get_m3u(
 @router.api_route("/xmltv.php", methods=["GET", "HEAD"])
 async def get_xmltv(
     request: Request,
-    username: str = Query(...),
-    password: str = Query(...)
+    token: Optional[str] = Query(None),
+    username: Optional[str] = Query(None),
+    password: Optional[str] = Query(None)
 ):
-    check_auth(username, password)
+    check_auth(username=username, password=password, token=token)
     base_url = get_base_url(request)
     xml_content = generate_xmltv_epg(base_url)
     return Response(content=xml_content, media_type="application/xml")

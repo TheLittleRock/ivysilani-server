@@ -1,7 +1,7 @@
 import time
 from typing import Optional
 from fastapi import APIRouter, Request, Response, Form, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
@@ -230,15 +230,17 @@ async def xtream_page(request: Request):
         return RedirectResponse(url="/login", status_code=303)
 
     base_url = get_base_url(request)
-    users = crud.list_users() if user.get("is_admin") else [user]
-    first_user = users[0] if users else None
-    sample_user = first_user["username"] if first_user else "admin"
+    user_token = user.get("user_token") or "active"
+    m3u_url = f"{base_url}/get.php?token={user_token}&type=m3u_plus"
+    epg_url = f"{base_url}/xmltv.php?token={user_token}"
 
     return templates.TemplateResponse(request=request, name="xtream.html", context={
         "user": user,
         "is_default_password": is_using_default_password(user),
         "base_url": base_url,
-        "sample_user": sample_user,
+        "user_token": user_token,
+        "m3u_url": m3u_url,
+        "epg_url": epg_url,
         "active_tab": "xtream"
     })
 
@@ -382,6 +384,38 @@ async def admin_index_show(request: Request, url: str = Form(...)):
         raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
     success = await archive_crawler.index_show(url)
     return {"status": "ok" if success else "error"}
+
+@router.post("/admin/reset-catalog")
+async def admin_reset_catalog(request: Request):
+    require_admin(request)
+    crud.clear_catalog()
+    archive_crawler.start_background_crawl(max_pages_per_category=4)
+    return RedirectResponse(url="/admin?success=Katalog+byl+vyprázdněn+a+byla+spuštěna+nová+kompletní+indexace", status_code=303)
+
+@router.get("/admin/logs/view")
+async def admin_view_logs(request: Request, lines: int = 200):
+    require_admin(request)
+    log_file = settings.DATA_DIR / "logs" / "ivysilani.log"
+    if not log_file.exists():
+        return PlainTextResponse("Log soubor zatím neexistuje.")
+    try:
+        content = log_file.read_text(encoding="utf-8", errors="replace")
+        log_lines = content.strip().splitlines()[-lines:]
+        return PlainTextResponse("\n".join(log_lines))
+    except Exception as e:
+        return PlainTextResponse(f"Chyba při čtení logu: {e}")
+
+@router.get("/admin/logs/download")
+async def admin_download_logs(request: Request):
+    require_admin(request)
+    log_file = settings.DATA_DIR / "logs" / "ivysilani.log"
+    if not log_file.exists():
+        raise HTTPException(status_code=404, detail="Log soubor neexistuje")
+    return FileResponse(
+        str(log_file),
+        media_type="text/plain",
+        filename="ivysilani.log"
+    )
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
