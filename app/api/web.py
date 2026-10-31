@@ -286,6 +286,9 @@ async def admin_page(
     if raw_crawl_info:
         try:
             last_crawl_info = json.loads(raw_crawl_info)
+            if isinstance(last_crawl_info.get("timestamp"), (int, float)):
+                from datetime import datetime
+                last_crawl_info["timestamp"] = datetime.fromtimestamp(last_crawl_info["timestamp"]).strftime("%d.%m.%Y %H:%M:%S")
         except Exception:
             pass
 
