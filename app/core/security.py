@@ -1,22 +1,24 @@
-from passlib.context import CryptContext
+import bcrypt
 import secrets
-import time
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password or not plain_password:
         return False
-    # Podpora jednoduchého fallbacku pokud by někdo vložil nehashované heslo
-    if not hashed_password.startswith("$2b$") and not hashed_password.startswith("$2a$"):
+    # Podpora fallbacku pro nehashované heslo
+    if not (hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$") or hashed_password.startswith("$2y$")):
         return plain_password == hashed_password
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        # bcrypt má limit délky hesla 72 bytů
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        hash_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
     except Exception:
         return False
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    pwd_bytes = password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
 hash_password = get_password_hash
 
