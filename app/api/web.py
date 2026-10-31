@@ -77,18 +77,21 @@ async def archive_page(
     shows = crud.list_shows(genre=genre, search=q, limit=limit, offset=offset)
     total_shows = crud.count_shows(genre=genre, search=q)
 
-    # Pokud uživatel vyhledává a máme málo výsledků, prohledáme přímo GraphQL ČT
+    # Pokud uživatel vyhledává a máme málo výsledků v DB, prohledáme přímo GraphQL ČT a doindexujeme
     if q and q.strip() and len(shows) < 6 and page == 1:
         try:
+            from app.services.archive_crawler import archive_crawler
             external_results = await ct_service.search_shows_graphql(q.strip(), limit=15)
             seen_ids = {s["id"] for s in shows}
             for res in external_results:
                 sidp = res.get("sidp")
                 if sidp and sidp not in seen_ids:
-                    show_meta = await ct_service.scrape_show_metadata(sidp)
-                    if show_meta:
-                        shows.append(show_meta)
-                        seen_ids.add(sidp)
+                    ok = await archive_crawler.index_show(sidp)
+                    if ok:
+                        saved_show = crud.get_show_by_id(sidp)
+                        if saved_show:
+                            shows.append(saved_show)
+                            seen_ids.add(sidp)
             total_shows = max(total_shows, len(shows))
         except Exception as e:
             logger.warning(f"GraphQL search error in archive_page: {e}")
@@ -116,16 +119,25 @@ async def show_detail_page(request: Request, show_id: str):
         return RedirectResponse(url="/login", status_code=303)
 
     show = crud.get_show_by_id(show_id)
-    if not show or (show.get("show_type") == "series" and len(crud.get_episodes_by_show(show_id)) <= 1):
-        # Načteme kompletní metadata a epizody z ČT
-        scraped = await ct_service.scrape_show_metadata(show_id)
-        if scraped:
-            show = crud.get_show_by_id(show_id) or scraped
-            
+    episodes = crud.get_episodes_by_show(show_id)
+    if not show or not episodes or (show.get("show_type") == "series" and len(episodes) <= 1):
+        # Načteme kompletní metadata a všechny epizody přímo do DB přes indexer
+        from app.services.archive_crawler import archive_crawler
+        await archive_crawler.index_show(show_id)
+        show = crud.get_show_by_id(show_id)
+        episodes = crud.get_episodes_by_show(show_id)
+
     if not show:
         raise HTTPException(status_code=404, detail="Pořad nebyl nalezen")
 
-    episodes = crud.get_episodes_by_show(show_id)
+    # Pokud pořad ještě nemá TMDB metadata, zkusíme je na pozadí doplnit
+    if not show.get("tmdb_id"):
+        from app.services.tmdb_service import tmdb_service
+        try:
+            await tmdb_service.enrich_show_metadata(show)
+            show = crud.get_show_by_id(show_id) or show
+        except Exception:
+            pass
     
     # Rozdělení epizod podle sérií
     seasons = {}
@@ -160,6 +172,14 @@ async def downloads_page(request: Request):
         "tasks": tasks,
         "active_tab": "downloads"
     })
+
+@router.get("/api/downloads/list")
+async def list_downloads_api(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    tasks = crud.list_download_tasks()
+    return {"tasks": tasks}
 
 @router.post("/api/downloads/add")
 async def add_download_api(request: Request, idec: str = Form(...), title: str = Form(...)):
@@ -258,17 +278,43 @@ async def admin_page(
     users = crud.list_users()
     crawler_stats = archive_crawler.stats
     total_shows = crud.count_shows()
+    tmdb_key = crud.get_setting("tmdb_api_key", "2f453df93e1dd76ca1e176029a0f9baf")
+    raw_crawl_info = crud.get_setting("last_crawl_info", "")
+    last_crawl_info = None
+    if raw_crawl_info:
+        try:
+            last_crawl_info = json.loads(raw_crawl_info)
+        except Exception:
+            pass
 
     return templates.TemplateResponse(request=request, name="admin.html", context={
         "user": user,
         "is_default_password": is_using_default_password(user),
         "users": users,
         "crawler_stats": crawler_stats,
+        "last_crawl_info": last_crawl_info,
+        "tmdb_api_key": tmdb_key,
         "total_shows": total_shows,
         "error": error,
         "success": success,
         "active_tab": "admin"
     })
+
+@router.post("/admin/settings/tmdb")
+async def admin_save_tmdb_settings(request: Request, tmdb_api_key: str = Form(...)):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse(url="/login", status_code=303)
+    crud.set_setting("tmdb_api_key", tmdb_api_key.strip())
+    return RedirectResponse(url="/admin?success=TMDB+API+klíč+byl+úspěšně+uložen#tmdb-settings", status_code=303)
+
+@router.post("/api/admin/enrich-tmdb")
+async def admin_enrich_tmdb_api(request: Request):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
+    archive_crawler.start_background_tmdb_enrichment()
+    return {"status": "ok", "message": "Obohacení katalogu z TMDB bylo spuštěno na pozadí."}
 
 @router.post("/admin/change-password")
 async def admin_change_password(

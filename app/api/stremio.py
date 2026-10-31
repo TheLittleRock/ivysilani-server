@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.db import crud
 from app.services.ct_service import ct_service, LIVE_CHANNELS
 from app.services.image_proxy import image_proxy
+from app.services.tmdb_service import tmdb_service
 from app.api.xtream import CHANNEL_STREAM_MAP, CHANNEL_ID_TO_STREAM_ID
 
 router = APIRouter(prefix="/stremio")
@@ -72,7 +73,7 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
         "background": f"{base_url}/static/logos/ct1.png",
         "resources": ["catalog", "meta", "stream"],
         "types": ["tv", "series", "movie"],
-        "idPrefixes": ["ct_"],
+        "idPrefixes": ["ct_", "tt", "tmdb:"],
         "catalogs": [
             {
                 "type": "tv",
@@ -182,13 +183,15 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
         for s_id, ch_code in CHANNEL_STREAM_MAP.items():
             ch = LIVE_CHANNELS.get(ch_code)
             if ch:
+                poster_rel = ch.get("poster") or ch.get("logo_png") or ch["logo"]
+                poster_url = f"{base_url}{poster_rel}"
                 logo_rel = ch.get("logo_png") or ch["logo"]
                 logo_url = f"{base_url}{logo_rel}"
                 metas.append({
                     "id": f"ct_live_{ch_code}",
                     "type": "tv",
                     "name": ch["name"],
-                    "poster": logo_url,
+                    "poster": poster_url,
                     "background": logo_url,
                     "description": ch["description"],
                     "genres": [ch["category"]]
@@ -240,16 +243,20 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
             pass
 
     for s in shows:
-        poster_raw = s.get("poster_url") or s.get("image_url")
-        backdrop_raw = s.get("backdrop_url") or poster_raw
-        
-        poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
-        backdrop_url = image_proxy.build_proxy_url(base_url, backdrop_raw)
+        poster_url = s.get("tmdb_poster")
+        if not poster_url:
+            poster_raw = s.get("poster_url") or s.get("image_url")
+            poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+
+        backdrop_url = s.get("tmdb_backdrop")
+        if not backdrop_url:
+            backdrop_raw = s.get("backdrop_url") or s.get("image_url")
+            backdrop_url = image_proxy.build_proxy_url(base_url, backdrop_raw)
 
         genres_list = [g.strip() for g in s.get("genre", "").split(",") if g.strip()]
         s_type = "movie" if s.get("show_type") == "movie" else "series"
 
-        metas.append({
+        item = {
             "id": f"ct_show_{s['id']}",
             "type": s_type,
             "name": s["title"],
@@ -258,7 +265,10 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
             "description": s.get("description", ""),
             "releaseInfo": str(s.get("year") or ""),
             "genres": genres_list or ["iVysílání"]
-        })
+        }
+        if s.get("imdb_id"):
+            item["imdb_id"] = s["imdb_id"]
+        metas.append(item)
 
     return cors_response({"metas": metas})
 
@@ -277,43 +287,69 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
     base_url = get_base_url(request)
     id_clean = id.replace(".json", "")
 
-    # Živý kanál
+    # 1. Živý kanál
     if id_clean.startswith("ct_live_"):
         ch_code = id_clean.replace("ct_live_", "")
         ch = LIVE_CHANNELS.get(ch_code)
         if not ch:
             raise HTTPException(status_code=404, detail="Kanál nenalezen")
+        poster_rel = ch.get("poster") or ch.get("logo_png") or ch["logo"]
+        poster_url = f"{base_url}{poster_rel}"
         logo_rel = ch.get("logo_png") or ch["logo"]
         logo_url = f"{base_url}{logo_rel}"
         meta = {
             "id": id_clean,
             "type": "tv",
             "name": ch["name"],
-            "poster": logo_url,
+            "poster": poster_url,
             "background": logo_url,
             "description": ch["description"],
             "genres": [ch["category"]]
         }
         return cors_response({"meta": meta})
 
-    # Pořad z iVysílání
+    # 2. Pořad z iVysílání nebo Cinemeta (IMDb / TMDB)
+    show = None
     if id_clean.startswith("ct_show_"):
         show_id = id_clean.replace("ct_show_", "")
         show = crud.get_show_by_id(show_id)
         if not show:
-            # Pokus o on-demand scrape z ČT
             show = await ct_service.scrape_show_metadata(show_id)
-            if not show:
-                raise HTTPException(status_code=404, detail="Pořad nenalezen")
+    elif id_clean.startswith("tt"):
+        show = crud.get_show_by_imdb_id(id_clean)
+        if not show:
+            tmdb_info = await tmdb_service.get_by_imdb_id(id_clean)
+            if tmdb_info and tmdb_info.get("title"):
+                candidates = crud.list_shows(search=tmdb_info["title"], limit=1)
+                if candidates:
+                    show = candidates[0]
+                    crud.update_show_tmdb(show["id"], tmdb_info["tmdb_id"], id_clean, tmdb_info.get("poster_url", "") or "", tmdb_info.get("backdrop_url", "") or "")
+    elif id_clean.startswith("tmdb:"):
+        raw_tmdb = id_clean.replace("tmdb:", "")
+        show = crud.get_show_by_tmdb_id(raw_tmdb)
 
-        episodes = crud.get_episodes_by_show(show_id)
-        # Filtrujeme pouze přehratelné epizody
+    if show:
+        episodes = crud.get_episodes_by_show(show["id"])
+        # Pokud seriál nemá žádné epizody, doindexujeme je
+        if not episodes and show.get("id"):
+            try:
+                from app.services.archive_crawler import archive_crawler
+                await archive_crawler.index_show(show["id"])
+                episodes = crud.get_episodes_by_show(show["id"])
+            except Exception:
+                pass
+
         playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
 
-        poster_raw = show.get("poster_url") or show.get("image_url")
-        backdrop_raw = show.get("backdrop_url") or poster_raw
-        poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
-        backdrop_url = image_proxy.build_proxy_url(base_url, backdrop_raw)
+        poster_url = show.get("tmdb_poster")
+        if not poster_url:
+            poster_raw = show.get("poster_url") or show.get("image_url")
+            poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+
+        backdrop_url = show.get("tmdb_backdrop")
+        if not backdrop_url:
+            backdrop_raw = show.get("backdrop_url") or show.get("image_url")
+            backdrop_url = image_proxy.build_proxy_url(base_url, backdrop_raw)
 
         genres_list = [g.strip() for g in show.get("genre", "").split(",") if g.strip()]
         is_movie = (show.get("show_type") == "movie")
@@ -328,6 +364,8 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
             "releaseInfo": str(show.get("year") or ""),
             "genres": genres_list or ["iVysílání"]
         }
+        if show.get("imdb_id"):
+            meta["imdb_id"] = show["imdb_id"]
 
         if is_movie:
             if playable_episodes:
@@ -339,7 +377,7 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
             for ep in playable_episodes:
                 ep_thumb = image_proxy.build_proxy_url(
                     base_url,
-                    ep.get("image_url") or poster_raw
+                    ep.get("image_url") or show.get("image_url")
                 )
                 videos.append({
                     "id": f"ct_ep_{ep['idec']}",
@@ -348,7 +386,7 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
                     "episode": ep.get("episode_num", 1),
                     "overview": ep.get("description", show.get("description", "")),
                     "thumbnail": ep_thumb,
-                    "released": ep.get("air_date") or ""
+                    "released": ep.get("broadcast_date") or ""
                 })
             meta["videos"] = videos
 
@@ -383,8 +421,8 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         ch = LIVE_CHANNELS.get(ch_code, {})
         stream_url = f"{base_url}/live/{u_name}/{u_pass}/{s_id}.m3u8"
         streams.append({
-            "name": "iVysílání Server",
-            "title": f"{ch.get('name', 'ČT')} (1080p HLS)",
+            "name": "Česká televize (iVysílání)",
+            "title": f"[ČT] {ch.get('name', 'ČT')} (1080p HLS)",
             "url": stream_url
         })
         return cors_response({"streams": streams})
@@ -397,20 +435,22 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         # Zjištění titulků
         subs = []
         try:
-            vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+            vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=True)
             if vod_info and vod_info.get("subtitles"):
                 for s in vod_info["subtitles"]:
-                    subs.append({
-                        "id": s.get("lang", "cs"),
-                        "url": s.get("url"),
-                        "lang": "ces" if s.get("lang") in ["cs", "ces", "cze"] else s.get("lang", "ces")
-                    })
-        except Exception:
-            pass
+                    raw_sub = s.get("url", "")
+                    if raw_sub:
+                        subs.append({
+                            "id": s.get("language", "ces"),
+                            "url": f"{base_url}/api/subtitles?url={urllib.parse.quote(raw_sub, safe='')}",
+                            "lang": "ces" if s.get("language") in ["cs", "ces", "cze"] else s.get("language", "ces")
+                        })
+        except Exception as e:
+            logger.debug(f"Subtitles resolve failed for {idec}: {e}")
 
         stream_obj = {
-            "name": "iVysílání Server",
-            "title": "ČT iVysílání (1080p HLS)",
+            "name": "Česká televize (iVysílání)",
+            "title": "[iVysílání] 1080p HLS",
             "url": stream_url
         }
         if subs:
@@ -419,7 +459,7 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         streams.append(stream_obj)
         return cors_response({"streams": streams})
 
-    # 3. Pořad přímo (např. film)
+    # 3. Pořad přímo podle ČT show_id (např. film)
     if id_clean.startswith("ct_show_"):
         show_id = id_clean.replace("ct_show_", "")
         episodes = crud.get_episodes_by_show(show_id)
@@ -430,20 +470,22 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
             
             subs = []
             try:
-                vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+                vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=True)
                 if vod_info and vod_info.get("subtitles"):
                     for s in vod_info["subtitles"]:
-                        subs.append({
-                            "id": s.get("lang", "cs"),
-                            "url": s.get("url"),
-                            "lang": "ces" if s.get("lang") in ["cs", "ces", "cze"] else s.get("lang", "ces")
-                        })
-            except Exception:
-                pass
+                        raw_sub = s.get("url", "")
+                        if raw_sub:
+                            subs.append({
+                                "id": s.get("language", "ces"),
+                                "url": f"{base_url}/api/subtitles?url={urllib.parse.quote(raw_sub, safe='')}",
+                                "lang": "ces" if s.get("language") in ["cs", "ces", "cze"] else s.get("language", "ces")
+                            })
+            except Exception as e:
+                logger.debug(f"Subtitles resolve failed for {idec}: {e}")
 
             stream_obj = {
-                "name": "iVysílání Server",
-                "title": f"{playable_episodes[0].get('title', 'Film')} (1080p HLS)",
+                "name": "Česká televize (iVysílání)",
+                "title": f"[iVysílání] {playable_episodes[0].get('title', 'Film')} (1080p HLS)",
                 "url": stream_url
             }
             if subs:
@@ -451,6 +493,80 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
 
             streams.append(stream_obj)
             return cors_response({"streams": streams})
+
+    # 4. IMDb ID (tt...) nebo TMDB ID (tmdb:...) ze Stremio Cinemeta katalogu
+    if id_clean.startswith("tt") or id_clean.startswith("tmdb:"):
+        parts = id_clean.split(":")
+        main_id = parts[0]
+        season_num = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+        ep_num = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+
+        show = None
+        if main_id.startswith("tt"):
+            show = crud.get_show_by_imdb_id(main_id)
+            if not show:
+                tmdb_info = await tmdb_service.get_by_imdb_id(main_id)
+                if tmdb_info and tmdb_info.get("title"):
+                    candidates = crud.list_shows(search=tmdb_info["title"], limit=1)
+                    if candidates:
+                        show = candidates[0]
+                        crud.update_show_tmdb(show["id"], tmdb_info["tmdb_id"], main_id, tmdb_info.get("poster_url", "") or "", tmdb_info.get("backdrop_url", "") or "")
+        elif main_id.startswith("tmdb:"):
+            raw_tmdb = main_id.replace("tmdb:", "")
+            show = crud.get_show_by_tmdb_id(raw_tmdb)
+
+        if show:
+            episodes = crud.get_episodes_by_show(show["id"], only_playable=True)
+            if not episodes and show.get("id"):
+                try:
+                    from app.services.archive_crawler import archive_crawler
+                    await archive_crawler.index_show(show["id"])
+                    episodes = crud.get_episodes_by_show(show["id"], only_playable=True)
+                except Exception:
+                    pass
+
+            target_ep = None
+            if show.get("show_type") == "movie" and episodes:
+                target_ep = episodes[0]
+            else:
+                for ep in episodes:
+                    if ep.get("season") == season_num and ep.get("episode_num") == ep_num:
+                        target_ep = ep
+                        break
+                if not target_ep and episodes:
+                    target_ep = episodes[min(ep_num - 1, len(episodes) - 1)]
+
+            if target_ep:
+                idec = target_ep["idec"]
+                stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
+                subs = []
+                try:
+                    vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=True)
+                    if vod_info and vod_info.get("subtitles"):
+                        for s in vod_info["subtitles"]:
+                            raw_sub = s.get("url", "")
+                            if raw_sub:
+                                subs.append({
+                                    "id": s.get("language", "ces"),
+                                    "url": f"{base_url}/api/subtitles?url={urllib.parse.quote(raw_sub, safe='')}",
+                                    "lang": "ces" if s.get("language") in ["cs", "ces", "cze"] else s.get("language", "ces")
+                                })
+                except Exception as e:
+                    logger.debug(f"Subtitles resolve failed for {idec}: {e}")
+
+                title_label = f"[iVysílání] {show['title']} (1080p HLS)"
+                if show.get("show_type") != "movie":
+                    title_label = f"[iVysílání] {show['title']} - S{season_num:02d}E{ep_num:02d} (1080p HLS)"
+
+                stream_obj = {
+                    "name": "Česká televize (iVysílání)",
+                    "title": title_label,
+                    "url": stream_url
+                }
+                if subs:
+                    stream_obj["subtitles"] = subs
+                streams.append(stream_obj)
+                return cors_response({"streams": streams})
 
     return cors_response({"streams": []})
 

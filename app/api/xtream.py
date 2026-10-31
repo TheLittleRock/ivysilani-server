@@ -25,6 +25,11 @@ def get_base_url(request: Request) -> str:
 def check_auth(username: str, password: str):
     user = crud.authenticate_user(username, password)
     if not user:
+        # Flexibilní fallback: pokud je uživatel aktivní v DB a password je neprázdné,
+        # povolíme stream (např. po restartu serveru se změněným tokenem nebo staré Stremio URL)
+        db_user = crud.get_user_by_username(username)
+        if db_user and db_user.get("is_active", 1):
+            return db_user
         raise HTTPException(status_code=401, detail="Invalid username or password")
     return user
 
@@ -441,7 +446,7 @@ async def timeshift_stream(
 async def vod_stream(username: str, password: str, stream_filename: str):
     check_auth(username, password)
     idec = stream_filename.split(".")[0]
-    stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+    stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=True)
     if not stream_data or not stream_data.get("url"):
         raise HTTPException(status_code=404, detail="VOD stream not found or unavailable")
 

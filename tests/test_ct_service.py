@@ -20,3 +20,13 @@ async def test_resolve_live_stream():
     assert stream_info["url"].startswith("http")
     assert "streamType=" in stream_info["url"] or "m3u8" in stream_info["url"] or "mpd" in stream_info["url"]
     assert stream_info["channel_id"] == "CH_24"
+
+@pytest.mark.asyncio
+async def test_resolve_vod_stream_drm_fallback():
+    # Bod obnovy (IDEC 21951212035) requires DRM on web profile, but resolves to unencrypted HLS via HbbTV fallback
+    stream_info = await ct_service.resolve_vod_stream("21951212035", allow_drm=True)
+    assert stream_info is not None
+    assert "url" in stream_info
+    assert stream_info["url"].startswith("http")
+    # Verify it has subtitles if present
+    assert "subtitles" in stream_info

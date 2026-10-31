@@ -18,14 +18,42 @@
         <div id="vod-player-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner" data-shaka-player-container>
             <video id="vod-video" class="w-full h-full" playsinline data-shaka-player></video>
         </div>
-        <div class="mt-3 pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="mt-3 pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
                 <h3 id="current-playing-title" class="text-base font-bold text-white"></h3>
                 <div id="current-playing-status" class="text-xs text-slate-400 mt-0.5 flex items-center space-x-2"></div>
             </div>
-            <button onclick="stopVodPlayer()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition self-end sm:self-auto">
-                Zavřít přehrávač
-            </button>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Výběr zvuku / dabingu -->
+                <div class="relative" id="vod-audio-box">
+                    <select id="vod-audio-select" onchange="changeVodAudio(this.value)" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 pr-6 hover:border-slate-500 appearance-none cursor-pointer">
+                        <option value="cs">Čeština</option>
+                    </select>
+                    <i class="fa-solid fa-headphones absolute right-2 top-2 text-[10px] text-slate-400 pointer-events-none"></i>
+                </div>
+
+                <!-- Výběr titulků -->
+                <div class="relative" id="vod-sub-box">
+                    <select id="vod-sub-select" onchange="changeVodSubtitles(this.value)" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 pr-6 hover:border-slate-500 appearance-none cursor-pointer">
+                        <option value="off">Titulky: Vypnuto</option>
+                        <option value="on">Titulky: Čeština</option>
+                    </select>
+                    <i class="fa-solid fa-closed-captioning absolute right-2 top-2 text-[10px] text-slate-400 pointer-events-none"></i>
+                </div>
+
+                <!-- Výběr kvality -->
+                <div class="relative" id="vod-quality-box">
+                    <select id="vod-quality-select" onchange="changeVodQuality(this.value)" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 pr-6 hover:border-slate-500 appearance-none cursor-pointer">
+                        <option value="auto">Kvalita: Auto</option>
+                    </select>
+                    <i class="fa-solid fa-sliders absolute right-2 top-2 text-[10px] text-slate-400 pointer-events-none"></i>
+                </div>
+
+                <button onclick="stopVodPlayer()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition self-end sm:self-auto">
+                    Zavřít
+                </button>
+            </div>
         </div>
     </div>
 
@@ -264,9 +292,16 @@
             trackLabelFormat: (window.shaka && shaka.ui && shaka.ui.TrackLabelFormat) ? shaka.ui.TrackLabelFormat.RESOLUTION : 2
         });
 
+        player.configure({
+            preferredAudioLanguage: 'cs',
+            preferredTextLanguage: 'cs'
+        });
+
         player.addEventListener('error', (event) => {
             console.error('Chyba Shaka přehrávače:', event.detail);
         });
+
+        player.addEventListener('trackschanged', updateVodTracksInUI);
     }
 
     document.addEventListener('DOMContentLoaded', initShakaVod);
@@ -316,20 +351,30 @@
             if (data.subtitles && data.subtitles.length > 0) {
                 for (const sub of data.subtitles) {
                     try {
+                        const subUrl = sub.url;
+                        const subLang = sub.language || sub.lang || 'ces';
+                        const subLabel = sub.label || 'Čeština';
                         await player.addTextTrackAsync(
-                            sub.url,
-                            sub.lang || 'cs',
+                            subUrl,
+                            subLang,
                             'subtitles',
                             'text/vtt',
                             null,
-                            sub.label || 'Čeština'
+                            subLabel
                         );
                     } catch (subErr) {
                         console.warn('Nepodařilo se přidat titulky:', subErr);
                     }
                 }
                 player.setTextTrackVisibility(true);
+                const subSelect = document.getElementById('vod-sub-select');
+                if (subSelect) subSelect.value = 'on';
+            } else {
+                const subSelect = document.getElementById('vod-sub-select');
+                if (subSelect) subSelect.value = 'off';
             }
+
+            updateVodTracksInUI();
 
             const video = document.getElementById('vod-video');
             video.play().catch(e => {
@@ -338,6 +383,65 @@
         } catch (e) {
             console.error('Chyba při přehrávání dílu:', e);
             statusEl.innerHTML = '<span class="text-red-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Chyba při spouštění přehrávání.</span>';
+        }
+    }
+
+    function updateVodTracksInUI() {
+        if (!player) return;
+
+        // 1. Zvukové stopy
+        const audioSelect = document.getElementById('vod-audio-select');
+        const languages = player.getAudioLanguages();
+        if (languages && languages.length > 0 && audioSelect) {
+            audioSelect.innerHTML = '';
+            languages.forEach(lang => {
+                const opt = document.createElement('option');
+                opt.value = lang;
+                opt.textContent = (lang === 'cs' || lang === 'cze' || lang === 'ces') ? 'Čeština' : (lang === 'en' ? 'Angličtina / Orig.' : lang.toUpperCase());
+                audioSelect.appendChild(opt);
+            });
+            audioSelect.value = player.getAudioLanguages()[0] || 'cs';
+        }
+
+        // 2. Dostupné kvality
+        const qualitySelect = document.getElementById('vod-quality-select');
+        const tracks = player.getVariantTracks();
+        if (tracks && tracks.length > 0 && qualitySelect) {
+            qualitySelect.innerHTML = '<option value="auto">Kvalita: Auto</option>';
+            const seenHeights = new Set();
+            const sortedTracks = [...tracks].sort((a, b) => (b.height || 0) - (a.height || 0));
+            sortedTracks.forEach(t => {
+                if (t.height && !seenHeights.has(t.height)) {
+                    seenHeights.add(t.height);
+                    const opt = document.createElement('option');
+                    opt.value = t.height;
+                    opt.textContent = `${t.height}p`;
+                    qualitySelect.appendChild(opt);
+                }
+            });
+        }
+    }
+
+    function changeVodAudio(lang) {
+        if (!player) return;
+        player.selectAudioLanguage(lang);
+    }
+
+    function changeVodSubtitles(val) {
+        if (!player) return;
+        player.setTextTrackVisibility(val === 'on');
+    }
+
+    function changeVodQuality(heightVal) {
+        if (!player) return;
+        if (heightVal === 'auto') {
+            player.configure({ abr: { enabled: true } });
+        } else {
+            player.configure({ abr: { enabled: false } });
+            const tracks = player.getVariantTracks().filter(t => t.height === parseInt(heightVal));
+            if (tracks.length > 0) {
+                player.selectVariantTrack(tracks[0], true);
+            }
         }
     }
 

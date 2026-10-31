@@ -64,35 +64,49 @@ class DownloadManager:
 
         crud.update_download_task(task_id, status="downloading", progress=0.0)
 
-        # 1. Získat HLS stream URL (bez DRM)
-        stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+        # 1. Získat HLS stream URL (s automatickým unencrypted HbbTV fallbackem)
+        stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=True)
         if not stream_data or not stream_data.get("url"):
-            # Zjistíme, zda je pořad chráněn DRM nebo zcela nedostupný
-            drm_check = await ct_service.resolve_vod_stream(idec, allow_drm=True)
-            if drm_check and drm_check.get("is_drm"):
-                crud.update_download_task(
-                    task_id,
-                    status="failed",
-                    error_message="Pořad je chráněn šifrováním Widevine DRM a nelze jej stáhnout jako prostý MP4 soubor."
-                )
-            else:
-                crud.update_download_task(
-                    task_id,
-                    status="failed",
-                    error_message="Pořad není dostupný v archivu ČT (práva vypršela nebo stream nelze načíst)."
-                )
+            crud.update_download_task(
+                task_id,
+                status="failed",
+                error_message="Pořad není dostupný v archivu ČT (práva vypršela nebo stream nelze načíst)."
+            )
             return
 
         stream_url = stream_data["url"]
-        output_filename = f"{title}_{idec}.mp4"
-        output_filepath = settings.DOWNLOAD_DIR / output_filename
 
-        # 2. Spustit ffmpeg pro stažení HLS do MP4 bez problematického aac_adtstoasc filtru
+        # 2. Inteligentní formátování názvu a cesty podle standardu Plex/Jellyfin
+        ep = crud.get_episode_by_idec(idec)
+        show = crud.get_show_by_id(ep["show_id"]) if (ep and ep.get("show_id")) else None
+
+        settings.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+        if show and show.get("show_type") == "series" and ep:
+            safe_show = re.sub(r'[\\/*?:"<>|]', "", show["title"]).strip()
+            safe_ep = re.sub(r'[\\/*?:"<>|]', "", ep["title"]).strip()
+            season_num = ep.get("season", 1) or 1
+            ep_num = ep.get("episode_num", 1) or 1
+            
+            show_dir = settings.DOWNLOAD_DIR / safe_show
+            show_dir.mkdir(parents=True, exist_ok=True)
+            output_filename = f"{safe_show} - S{season_num:02d}E{ep_num:02d} - {safe_ep}.mp4"
+            output_filepath = show_dir / output_filename
+        else:
+            safe_title = re.sub(r'[\\/*?:"<>|]', "", title).strip()
+            year_str = f" ({show['year']})" if (show and show.get("year")) else ""
+            output_filename = f"{safe_title}{year_str}.mp4"
+            output_filepath = settings.DOWNLOAD_DIR / output_filename
+
+        # 3. Spustit ffmpeg pro stažení HLS do MP4
         headers_str = f"User-Agent: {settings.USER_AGENT}\r\nReferer: https://www.ceskatelevize.cz/\r\nOrigin: https://www.ceskatelevize.cz\r\n"
         cmd = [
             "ffmpeg",
             "-y",
             "-headers", headers_str,
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "5",
             "-i", stream_url,
             "-c", "copy",
             "-movflags", "+faststart",
@@ -107,11 +121,14 @@ class DownloadManager:
             )
             self._active_processes[task_id] = process
 
-            # Sledování průběhu stahování a ukládání posledních řádků stderr pro případ chyby
+            # Sledování průběhu stahování, rychlosti a ETA
             duration = 0.0
             time_pattern = re.compile(r'time=(\d+):(\d+):(\d+\.\d+)')
             duration_pattern = re.compile(r'Duration: (\d+):(\d+):(\d+\.\d+)')
+            speed_pattern = re.compile(r'speed=\s*([\d\.]+)x')
+            size_pattern = re.compile(r'size=\s*(\d+)kB')
             stderr_lines = []
+            last_update = time.time()
 
             while True:
                 line = await process.stderr.readline()
@@ -119,7 +136,7 @@ class DownloadManager:
                     break
                 line_str = line.decode('utf-8', errors='ignore')
                 stderr_lines.append(line_str.strip())
-                if len(stderr_lines) > 30:
+                if len(stderr_lines) > 25:
                     stderr_lines.pop(0)
 
                 if not duration:
@@ -128,12 +145,50 @@ class DownloadManager:
                         h, m, s = dur_match.groups()
                         duration = int(h) * 3600 + int(m) * 60 + float(s)
 
-                time_match = time_pattern.search(line_str)
-                if time_match and duration > 0:
-                    h, m, s = time_match.groups()
-                    current_time = int(h) * 3600 + int(m) * 60 + float(s)
-                    pct = min(99.0, round((current_time / duration) * 100, 1))
-                    crud.update_download_task(task_id, progress=pct)
+                now = time.time()
+                # Aktualizace stavu každých 1.5 sekundy
+                if now - last_update >= 1.5:
+                    last_update = now
+                    current_time = 0.0
+                    time_match = time_pattern.search(line_str)
+                    if time_match:
+                        h, m, s = time_match.groups()
+                        current_time = int(h) * 3600 + int(m) * 60 + float(s)
+
+                    pct = 0.0
+                    if duration > 0 and current_time > 0:
+                        pct = min(99.0, round((current_time / duration) * 100, 1))
+
+                    speed_str = ""
+                    speed_match = speed_pattern.search(line_str)
+                    if speed_match:
+                        speed_val = speed_match.group(1)
+                        speed_str = f"{speed_val}x"
+
+                    current_size = 0
+                    size_match = size_pattern.search(line_str)
+                    if size_match:
+                        current_size = int(size_match.group(1)) * 1024
+
+                    eta_str = ""
+                    if duration > 0 and current_time > 0 and speed_match:
+                        try:
+                            sp_float = float(speed_match.group(1))
+                            if sp_float > 0:
+                                rem_sec = int((duration - current_time) / sp_float)
+                                m, s = divmod(rem_sec, 60)
+                                eta_str = f"{m}m {s}s"
+                        except Exception:
+                            pass
+
+                    crud.update_download_task(
+                        task_id,
+                        progress=pct,
+                        speed=speed_str,
+                        eta=eta_str,
+                        filesize=current_size,
+                        filepath=str(output_filepath)
+                    )
 
             await process.wait()
             self._active_processes.pop(task_id, None)
@@ -144,6 +199,8 @@ class DownloadManager:
                     task_id,
                     status="completed",
                     progress=100.0,
+                    speed="",
+                    eta="",
                     filepath=str(output_filepath),
                     filesize=filesize
                 )

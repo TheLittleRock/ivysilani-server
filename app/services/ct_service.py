@@ -17,6 +17,7 @@ LIVE_CHANNELS = {
         "category": "Česká televize", "epg_id": "ct1.cz",
         "logo": "/static/logos/ct1.svg",
         "logo_png": "/static/logos/ct1.png",
+        "poster": "/static/logos/ct1_poster.png",
         "description": "Hlavní program České televize – rodinná televize, seriály, zábava, zprávy."
     },
     "CH_2": {
@@ -24,6 +25,7 @@ LIVE_CHANNELS = {
         "category": "Česká televize", "epg_id": "ct2.cz",
         "logo": "/static/logos/ct2.svg",
         "logo_png": "/static/logos/ct2.png",
+        "poster": "/static/logos/ct2_poster.png",
         "description": "Dokumenty, příroda, historie, kvalitní filmová tvorba a publicistika."
     },
     "CH_24": {
@@ -31,6 +33,7 @@ LIVE_CHANNELS = {
         "category": "Česká televize", "epg_id": "ct24.cz",
         "logo": "/static/logos/ct24.svg",
         "logo_png": "/static/logos/ct24.png",
+        "poster": "/static/logos/ct24_poster.png",
         "description": "Nepřetržité 24hodinové zpravodajství a aktuální publicistika."
     },
     "CH_4": {
@@ -38,6 +41,7 @@ LIVE_CHANNELS = {
         "category": "Česká televize", "epg_id": "ctsport.cz",
         "logo": "/static/logos/ctsport.svg",
         "logo_png": "/static/logos/ctsport.png",
+        "poster": "/static/logos/ctsport_poster.png",
         "description": "Český a mezinárodní sport, přímé přenosy a sportovní magazíny."
     },
     "CH_5": {
@@ -45,6 +49,7 @@ LIVE_CHANNELS = {
         "category": "Česká televize", "epg_id": "ctd.cz",
         "logo": "/static/logos/ctd.svg",
         "logo_png": "/static/logos/ctd.png",
+        "poster": "/static/logos/ctd_poster.png",
         "description": "Dětský kanál Déčko pro děti od 4 do 12 let. Pohádky, vzdělávání a animované filmy."
     },
     "CH_6": {
@@ -52,6 +57,7 @@ LIVE_CHANNELS = {
         "category": "Česká televize", "epg_id": "ctart.cz",
         "logo": "/static/logos/ctart.svg",
         "logo_png": "/static/logos/ctart.png",
+        "poster": "/static/logos/ctart_poster.png",
         "description": "Kulturní a umělecký kanál ČT – divadlo, hudba, výtvarné umění a filmy."
     },
     "CH_25": {
@@ -59,6 +65,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus1.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus1_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 1."
     },
     "CH_26": {
@@ -66,6 +73,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus2.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus2_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 2."
     },
     "CH_27": {
@@ -73,6 +81,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus3.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus3_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 3."
     },
     "CH_28": {
@@ -80,6 +89,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus4.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus4_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 4."
     },
     "CH_29": {
@@ -87,6 +97,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus5.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus5_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 5."
     },
     "CH_30": {
@@ -94,6 +105,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus6.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus6_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 6."
     },
     "CH_31": {
@@ -101,6 +113,7 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus7.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus7_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 7."
     },
     "CH_32": {
@@ -108,8 +121,27 @@ LIVE_CHANNELS = {
         "category": "ČT sport Plus", "epg_id": "ctsportplus8.cz",
         "logo": "/static/logos/ctsportplus.svg",
         "logo_png": "/static/logos/ctsportplus.png",
+        "poster": "/static/logos/ctsportplus8_poster.png",
         "description": "Internetový sportovní přenos ČT sport Plus 8."
     }
+}
+
+CHANNEL_KEY_MAP = {
+    "ct1": "CH_1", "1": "CH_1", "ch_1": "CH_1", "CH_1": "CH_1",
+    "ct2": "CH_2", "2": "CH_2", "ch_2": "CH_2", "CH_2": "CH_2",
+    "ct24": "CH_24", "24": "CH_24", "ch_24": "CH_24", "CH_24": "CH_24",
+    "ctsport": "CH_4", "sport": "CH_4", "4": "CH_4", "ch_4": "CH_4", "CH_4": "CH_4",
+    "ctd": "CH_5", "decko": "CH_5", "5": "CH_5", "ch_5": "CH_5", "CH_5": "CH_5",
+    "ctart": "CH_6", "art": "CH_6", "6": "CH_6", "ch_6": "CH_6", "CH_6": "CH_6",
+    "ct3": "CH_7", "3": "CH_7", "ch_7": "CH_7", "CH_7": "CH_7",
+    "ctsportplus1": "CH_25", "i25": "CH_25", "25": "CH_25", "ch_25": "CH_25", "CH_25": "CH_25",
+    "ctsportplus2": "CH_26", "i26": "CH_26", "26": "CH_26", "ch_26": "CH_26", "CH_26": "CH_26",
+    "ctsportplus3": "CH_27", "i27": "CH_27", "27": "CH_27", "ch_27": "CH_27", "CH_27": "CH_27",
+    "ctsportplus4": "CH_28", "i28": "CH_28", "28": "CH_28", "ch_28": "CH_28", "CH_28": "CH_28",
+    "ctsportplus5": "CH_29", "i29": "CH_29", "29": "CH_29", "ch_29": "CH_29", "CH_29": "CH_29",
+    "ctsportplus6": "CH_30", "i30": "CH_30", "30": "CH_30", "ch_30": "CH_30", "CH_30": "CH_30",
+    "ctsportplus7": "CH_31", "i31": "CH_31", "31": "CH_31", "ch_31": "CH_31", "CH_31": "CH_31",
+    "ctsportplus8": "CH_32", "i32": "CH_32", "32": "CH_32", "ch_32": "CH_32", "CH_32": "CH_32",
 }
 
 def parse_season_number(title: str, default: int = 1) -> int:
@@ -175,17 +207,20 @@ class CTService:
         return subtitles
 
     async def resolve_live_stream(self, ch_key: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
-        """Získá aktuální manifest živého vysílání (DASH Widevine s fallbackem na HLS)."""
-        cached = self._cache.get(f"live_{ch_key}")
+        """Získá aktuální manifest živého vysílání (HbbTV unencrypted HLS s fallbackem/doplněním na DASH Widevine)."""
+        norm_key = CHANNEL_KEY_MAP.get(ch_key.lower(), ch_key)
+        cached = self._cache.get(f"live_{norm_key}")
         if cached and cached["expiry"] > time.time():
             return cached["data"]
 
-        hls_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{ch_key}?canPlayDrm=false&quality=web&streamType=hls"
-        dash_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{ch_key}?canPlayDrm=true&quality=web&streamType=dash"
+        # 1. HbbTV profil - poskytuje neblokovaný, nešifrovaný 1080p HLS stream
+        hbbtv_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{norm_key}?streamType=hls&origin=hbbtv&canPlayDrm=false"
+        # 2. DASH Widevine stream pro prohlížeč/Shaka
+        dash_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{norm_key}?canPlayDrm=true&quality=web&streamType=dash"
 
         try:
             async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
-                hls_resp = await client.get(hls_url)
+                hls_resp = await client.get(hbbtv_url)
                 dash_resp = await client.get(dash_url)
 
                 hls_data = hls_resp.json() if hls_resp.status_code == 200 else {}
@@ -203,25 +238,25 @@ class CTService:
                     is_drm = True
 
                 result = {
-                    "channel_id": ch_key,
-                    "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS.get(ch_key, {}).get("name", "ČT"),
-                    "url": dash_main if (allow_drm and dash_main) else (hls_main or dash_main),
+                    "channel_id": norm_key,
+                    "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS.get(norm_key, {}).get("name", "ČT"),
+                    "url": hls_main or dash_main,
                     "hls_url": hls_main,
                     "dash_url": dash_main,
                     "timeshift_url": timeshift_url,
                     "is_drm": is_drm,
-                    "manifest_type": "mpd" if (allow_drm and dash_main) else "hls",
-                    "qualities": dash_data.get("availableQualities") or hls_data.get("availableQualities", []),
-                    "audio_tracks": dash_data.get("audioTracks") or hls_data.get("audioTracks", []),
-                    "subtitles": self._extract_subtitles(dash_data.get("subtitles") or hls_data.get("subtitles", []))
+                    "manifest_type": "hls" if hls_main else "mpd",
+                    "qualities": hls_data.get("availableQualities") or dash_data.get("availableQualities", []),
+                    "audio_tracks": hls_data.get("audioTracks") or dash_data.get("audioTracks", []),
+                    "subtitles": self._extract_subtitles(hls_data.get("subtitles") or dash_data.get("subtitles", []))
                 }
-                self._cache[f"live_{ch_key}"] = {
+                self._cache[f"live_{norm_key}"] = {
                     "data": result,
                     "expiry": time.time() + 1800
                 }
                 return result
         except Exception as e:
-            logger.error(f"Error resolving live stream for {ch_key}: {e}")
+            logger.error(f"Error resolving live stream for {norm_key}: {e}")
             return None
 
     async def get_live_epg_now(self) -> Dict[str, Dict[str, Any]]:
@@ -294,65 +329,93 @@ class CTService:
         return result
 
     async def resolve_vod_stream(self, idec: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
-        """Získá streamovací URL pro daný IDEC kód (pořad nebo epizodu)."""
+        """Získá streamovací URL pro daný IDEC kód (pořad nebo epizodu).
+        Používá HLS bez DRM s automatickým HbbTV fallbackem pro unencrypted 1080p streamy
+        a volitelným DASH Widevine pro přehrávače s podporou DRM.
+        """
         cached = self._cache.get(f"vod_{idec}")
         if cached and cached["expiry"] > time.time():
             return cached["data"]
 
-        # 1. Zkusíme HLS bez DRM
-        hls_url = f"https://api.ceskatelevize.cz/video/v1/playlist-vod/v1/stream-data/media/external/{idec}?canPlayDrm=false&quality=web&streamType=hls&origin=ivysilani"
+        hls_stream_url = None
+        dash_stream_url = None
+        title = ""
+        raw_subs = []
+
         try:
             async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
-                resp = await client.get(hls_url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    streams = data.get("streams", [])
-                    if streams and "url" in streams[0]:
-                        raw_subs = streams[0].get("subtitles", []) or data.get("subtitles", [])
-                        result = {
-                            "idec": idec,
-                            "title": data.get("title", ""),
-                            "url": streams[0]["url"],
-                            "is_drm": False,
-                            "manifest_type": "hls",
-                            "subtitles": self._extract_subtitles(raw_subs),
-                            "raw_subtitles": raw_subs
-                        }
-                        self._cache[f"vod_{idec}"] = {"data": result, "expiry": time.time() + 1800}
-                        return result
-        except Exception as e:
-            logger.warning(f"HLS vod resolve failed for {idec}, attempting DASH: {e}")
+                # 1. Zkusíme standardní webový HLS bez DRM
+                web_hls_url = f"https://api.ceskatelevize.cz/video/v1/playlist-vod/v1/stream-data/media/external/{idec}?canPlayDrm=false&quality=web&streamType=hls&origin=ivysilani"
+                try:
+                    resp = await client.get(web_hls_url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        streams = data.get("streams", [])
+                        if streams and "url" in streams[0]:
+                            hls_stream_url = streams[0]["url"]
+                            title = data.get("title", "")
+                            raw_subs = streams[0].get("subtitles", []) or data.get("subtitles", [])
+                except Exception as e:
+                    logger.debug(f"Web HLS resolve failed for {idec}: {e}")
 
-        if not allow_drm:
+                # 2. Pokud webové HLS selhalo (DRM omezení na webu jako u Bodu obnovy), zkusíme HbbTV profil (unencrypted 1080p HLS)
+                if not hls_stream_url:
+                    hbbtv_url = f"https://api.ceskatelevize.cz/video/v1/playlist-vod/v1/stream-data/media/external/{idec}?canPlayDrm=false&streamType=hls&origin=hbbtv"
+                    try:
+                        resp_hbbtv = await client.get(hbbtv_url)
+                        if resp_hbbtv.status_code == 200:
+                            data_hbbtv = resp_hbbtv.json()
+                            streams_hbbtv = data_hbbtv.get("streams", [])
+                            if streams_hbbtv and "url" in streams_hbbtv[0]:
+                                hls_stream_url = streams_hbbtv[0]["url"]
+                                if not title:
+                                    title = data_hbbtv.get("title", "")
+                                if not raw_subs:
+                                    raw_subs = streams_hbbtv[0].get("subtitles", []) or data_hbbtv.get("subtitles", [])
+                    except Exception as e:
+                        logger.debug(f"HbbTV HLS resolve failed for {idec}: {e}")
+
+                # 3. Získáme také DASH Widevine, pokud je vyžadováno nebo pro web přehrávač
+                if allow_drm or not hls_stream_url:
+                    dash_api_url = f"https://api.ceskatelevize.cz/video/v1/playlist-vod/v1/stream-data/media/external/{idec}?canPlayDrm=true&quality=web&streamType=dash&origin=ivysilani&usePlayability=true"
+                    try:
+                        resp_dash = await client.get(dash_api_url)
+                        if resp_dash.status_code == 200:
+                            data_dash = resp_dash.json()
+                            streams_dash = data_dash.get("streams", [])
+                            if streams_dash and "url" in streams_dash[0]:
+                                dash_stream_url = streams_dash[0]["url"]
+                                if not title:
+                                    title = data_dash.get("title", "")
+                                if not raw_subs:
+                                    raw_subs = streams_dash[0].get("subtitles", []) or data_dash.get("subtitles", [])
+                    except Exception as e:
+                        logger.debug(f"DASH resolve failed for {idec}: {e}")
+
+        except Exception as e:
+            logger.warning(f"Error fetching VOD streams for {idec}: {e}")
+
+        if not hls_stream_url and not dash_stream_url:
             return None
 
-        # 2. Pokud HLS nevyšlo nebo vyžaduje DRM, zkusíme DASH Widevine
-        dash_url = f"https://api.ceskatelevize.cz/video/v1/playlist-vod/v1/stream-data/media/external/{idec}?canPlayDrm=true&quality=web&streamType=dash&origin=ivysilani&usePlayability=true"
-        try:
-            async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
-                resp = await client.get(dash_url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    streams = data.get("streams", [])
-                    if streams and "url" in streams[0]:
-                        raw_dash_url = streams[0]["url"]
-                        raw_subs = streams[0].get("subtitles", []) or data.get("subtitles", [])
-                        result = {
-                            "idec": idec,
-                            "title": data.get("title", ""),
-                            "url": raw_dash_url,
-                            "is_drm": True,
-                            "manifest_type": "mpd",
-                            "license_key": "https://ivys-wvproxy.o2tv.cz/license?access_token=public|Origin=https%3A%2F%2Fwww.ceskatelevize.cz&Referer=https%3A%2F%2Fwww.ceskatelevize.cz%2F|R{SSM}|",
-                            "subtitles": self._extract_subtitles(raw_subs),
-                            "raw_subtitles": raw_subs
-                        }
-                        self._cache[f"vod_{idec}"] = {"data": result, "expiry": time.time() + 1800}
-                        return result
-        except Exception as e:
-            logger.error(f"DASH vod resolve failed for {idec}: {e}")
+        # Preferujeme unencrypted HLS (funguje ve Stremio, TiviMate, VLC, Downloaderu i prohlížeči)
+        preferred_url = hls_stream_url or dash_stream_url
+        is_drm = bool(not hls_stream_url and dash_stream_url)
 
-        return None
+        result = {
+            "idec": idec,
+            "title": title,
+            "url": preferred_url,
+            "hls_url": hls_stream_url,
+            "dash_url": dash_stream_url,
+            "is_drm": is_drm,
+            "manifest_type": "hls" if hls_stream_url else "mpd",
+            "license_key": "https://ivys-wvproxy.o2tv.cz/license?access_token=public|Origin=https%3A%2F%2Fwww.ceskatelevize.cz&Referer=https%3A%2F%2Fwww.ceskatelevize.cz%2F|R{SSM}|",
+            "subtitles": self._extract_subtitles(raw_subs),
+            "raw_subtitles": raw_subs
+        }
+        self._cache[f"vod_{idec}"] = {"data": result, "expiry": time.time() + 1800}
+        return result
 
     async def get_episodes_for_programme(
         self,

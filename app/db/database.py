@@ -78,10 +78,16 @@ def init_db():
         _add_column_if_not_exists(cursor, "shows", "logo_url", "TEXT")
         _add_column_if_not_exists(cursor, "shows", "show_type", "TEXT DEFAULT 'series'")
         _add_column_if_not_exists(cursor, "shows", "is_playable", "INTEGER DEFAULT 1")
+        _add_column_if_not_exists(cursor, "shows", "tmdb_id", "TEXT")
+        _add_column_if_not_exists(cursor, "shows", "imdb_id", "TEXT")
+        _add_column_if_not_exists(cursor, "shows", "tmdb_poster", "TEXT")
+        _add_column_if_not_exists(cursor, "shows", "tmdb_backdrop", "TEXT")
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_genre ON shows(genre);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_type ON shows(show_type);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_playable ON shows(is_playable);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_tmdb_id ON shows(tmdb_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_imdb_id ON shows(imdb_id);")
 
         # 3. Tabulka epizod
         cursor.execute("""
@@ -133,6 +139,7 @@ def init_db():
             value TEXT
         );
         """)
+        cursor.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('tmdb_api_key', ?)", ("2f453df93e1dd76ca1e176029a0f9baf",))
 
         # Vytvoření výchozího administrátora, pokud ještě neexistuje
         cursor.execute("SELECT id, user_token FROM users WHERE username = ?", (settings.DEFAULT_ADMIN_USER,))

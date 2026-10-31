@@ -8,9 +8,64 @@
     <!-- Levý / Hlavní sloupec: Video Player -->
     <div class="lg:col-span-2 space-y-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-            <!-- Přehrávač kontejner se Shaka Player UI -->
-            <div id="video-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner" data-shaka-player-container>
-                <video id="ct-video" class="w-full h-full" autoplay playsinline data-shaka-player></video>
+            <!-- Moderní přehrávač kontejner bez zdvojených ovládacích prvků -->
+            <div id="video-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner group select-none">
+                <video id="ct-video" class="w-full h-full object-contain" autoplay playsinline></video>
+
+                <!-- Indikátor načítání (spinner) -->
+                <div id="video-spinner" class="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none hidden">
+                    <i class="fa-solid fa-circle-notch fa-spin text-3xl text-blue-500"></i>
+                </div>
+
+                <!-- Středové velké Play tlačítko při pozastavení -->
+                <div id="center-play-btn" onclick="togglePlayPause()" class="absolute inset-0 flex items-center justify-center bg-black/40 cursor-pointer hidden transition">
+                    <div class="w-16 h-16 rounded-full bg-blue-600/90 hover:bg-blue-500 text-white flex items-center justify-center text-2xl shadow-xl transition transform hover:scale-110">
+                        <i class="fa-solid fa-play ml-1"></i>
+                    </div>
+                </div>
+
+                <!-- Vlastní moderní ovládací panel na míru pro Live TV -->
+                <div id="custom-controls" class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-3 pt-6 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <div class="flex items-center space-x-3">
+                        <button onclick="togglePlayPause()" class="text-white hover:text-blue-400 transition text-base w-8 h-8 flex items-center justify-center" title="Přehrát / Pozastavit">
+                            <i id="play-pause-icon" class="fa-solid fa-pause"></i>
+                        </button>
+                        
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white shadow-sm">
+                            <i class="fa-solid fa-circle text-[5px] mr-1.5 animate-pulse"></i> ŽIVĚ
+                        </span>
+
+                        <div class="flex items-center space-x-2">
+                            <button onclick="toggleMute()" class="text-slate-300 hover:text-white transition text-sm w-7 h-7 flex items-center justify-center" title="Ztlumit">
+                                <i id="volume-icon" class="fa-solid fa-volume-high"></i>
+                            </button>
+                            <input id="volume-slider" type="range" min="0" max="1" step="0.05" value="1" oninput="changeVolume(this.value)" class="w-16 sm:w-24 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" title="Hlasitost" />
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <!-- Výběr zvukové stopy / dabingu -->
+                        <div class="relative" id="audio-container">
+                            <select id="audio-select" onchange="changeAudio(this.value)" class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-lg pl-2 pr-6 py-1 hover:border-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer">
+                                <option value="cs">Čeština</option>
+                            </select>
+                            <i class="fa-solid fa-headphones absolute right-2 top-2 text-[10px] text-slate-400 pointer-events-none"></i>
+                        </div>
+
+                        <!-- Výběr rozlišení -->
+                        <div class="relative" id="quality-container">
+                            <select id="quality-select" onchange="changeQuality(this.value)" class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-lg pl-2 pr-6 py-1 hover:border-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer">
+                                <option value="auto">Auto</option>
+                            </select>
+                            <i class="fa-solid fa-sliders absolute right-2 top-2 text-[10px] text-slate-400 pointer-events-none"></i>
+                        </div>
+
+                        <!-- Fullscreen -->
+                        <button onclick="toggleFullscreen()" class="text-slate-300 hover:text-white transition text-sm w-8 h-8 flex items-center justify-center" title="Celá obrazovka">
+                            <i id="fullscreen-icon" class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Informace o právě hrajícím kanálu a aktuálním programu -->
@@ -22,11 +77,11 @@
                     <div>
                         <div class="flex items-center space-x-2">
                             <h2 id="player-channel-title" class="text-lg font-bold text-white tracking-wide">ČT1</h2>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800 animate-pulse">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
                                 <i class="fa-solid fa-circle text-[5px] mr-1"></i> ŽIVĚ
                             </span>
                             <span id="player-drm-badge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
-                                <i class="fa-solid fa-lock text-[8px] mr-1"></i> Widevine DRM
+                                <i class="fa-solid fa-shield text-[8px] mr-1"></i> Widevine
                             </span>
                         </div>
                         <p id="player-current-program" class="text-sm font-medium text-slate-200 mt-0.5">Načítám program...</p>
@@ -111,70 +166,68 @@
 {% block extra_scripts %}
 <script>
     let player = null;
-    let ui = null;
     let currentChannelId = 'CH_1';
+    let videoEl = null;
 
-    async function initShaka() {
-        shaka.polyfill.installAll();
+    async function initPlayer() {
+        videoEl = document.getElementById('ct-video');
 
-        if (!shaka.Player.isBrowserSupported()) {
-            console.error('Prohlížeč nepodporuje Shaka Player.');
-            return;
+        // Shaka polyfills
+        if (window.shaka) {
+            shaka.polyfill.installAll();
         }
 
-        const video = document.getElementById('ct-video');
-        const container = document.getElementById('video-container');
+        if (window.shaka && shaka.Player.isBrowserSupported()) {
+            player = new shaka.Player(videoEl);
 
-        player = new shaka.Player(video);
-        ui = new shaka.ui.Overlay(player, container, video);
-
-        // Nastavení licenčního serveru Widevine DRM pro Českou televizi
-        player.configure({
-            drm: {
-                servers: {
-                    'com.widevine.alpha': 'https://ivys-wvproxy.o2tv.cz/license?access_token=public'
+            player.configure({
+                preferredAudioLanguage: 'cs',
+                drm: {
+                    servers: {
+                        'com.widevine.alpha': 'https://ivys-wvproxy.o2tv.cz/license?access_token=public'
+                    }
+                },
+                streaming: {
+                    bufferingGoal: 6,
+                    rebufferingGoal: 2,
+                    jumpLargeGaps: true
                 }
-            },
-            streaming: {
-                bufferingGoal: 10,
-                rebufferingGoal: 2,
-                jumpLargeGaps: true
-            }
-        });
+            });
 
-        // Konfigurace ovládacího panelu specificky pro Live TV
-        ui.configure({
-            controlPanelElements: [
-                'play_pause',
-                'live',
-                'spacer',
-                'volume',
-                'quality',
-                'overflow_menu',
-                'fullscreen'
-            ],
-            overflowMenuButtons: [
-                'quality',
-                'language'
-            ],
-            trackLabelFormat: (window.shaka && shaka.ui && shaka.ui.TrackLabelFormat) ? shaka.ui.TrackLabelFormat.RESOLUTION : 2
+            player.addEventListener('error', (e) => {
+                console.error('Shaka player error:', e);
+            });
+
+            player.addEventListener('trackschanged', updateTracksInUI);
+            player.addEventListener('adaptation', updateActiveQualityUI);
+        }
+
+        // Event listenery pro video element
+        videoEl.addEventListener('play', () => {
+            document.getElementById('play-pause-icon').className = 'fa-solid fa-pause';
+            document.getElementById('center-play-btn').classList.add('hidden');
+        });
+        videoEl.addEventListener('pause', () => {
+            document.getElementById('play-pause-icon').className = 'fa-solid fa-play';
+            document.getElementById('center-play-btn').classList.remove('hidden');
+        });
+        videoEl.addEventListener('waiting', () => {
+            document.getElementById('video-spinner').classList.remove('hidden');
+        });
+        videoEl.addEventListener('playing', () => {
+            document.getElementById('video-spinner').classList.add('hidden');
         });
 
         // Automatické spuštění ČT1
         playChannel('CH_1', 'ČT1', '/static/logos/ct1.png', 'Hlavní rodinný program České televize', '');
     }
 
-    document.addEventListener('shaka-ui-loaded', initShaka);
-    document.addEventListener('DOMContentLoaded', () => {
-        if (!window.shaka) {
-            setTimeout(initShaka, 500);
-        }
-    });
+    document.addEventListener('DOMContentLoaded', initPlayer);
 
     async function playChannel(channelId, name, logo, desc, currentProg) {
         currentChannelId = channelId;
 
-        // Aktualizovat aktivní tlačítko
+        // Aktualizovat aktivní tlačítko v seznamu
         document.querySelectorAll('.channel-btn').forEach(b => {
             b.classList.remove('bg-blue-950/40', 'border-blue-600');
         });
@@ -183,7 +236,7 @@
             activeBtn.classList.add('bg-blue-950/40', 'border-blue-600');
         }
 
-        // Aktualizovat UI
+        // Aktualizovat záhlaví
         document.getElementById('player-channel-title').textContent = name;
         document.getElementById('player-channel-logo').src = logo;
         document.getElementById('player-channel-desc').textContent = desc;
@@ -193,10 +246,13 @@
             document.getElementById('player-current-program').textContent = 'Živé vysílání stanice ' + name;
         }
 
+        document.getElementById('video-spinner').classList.remove('hidden');
+
         try {
             const resp = await fetch(`/api/stream/live/${channelId}`);
             if (!resp.ok) {
                 alert('Chyba při načítání živého streamu z ČT.');
+                document.getElementById('video-spinner').classList.add('hidden');
                 return;
             }
             const data = await resp.json();
@@ -209,30 +265,144 @@
                 drmBadge.classList.add('hidden');
             }
 
-            // Načtení streamu do Shaka Playeru (podporuje DASH Widevine MPD i HLS)
+            const streamUrl = data.url || data.hls_url;
+
             if (player) {
-                await player.load(data.url);
-                const video = document.getElementById('ct-video');
-                video.play().catch(e => {
-                    console.log('Autoplay muted requirement:', e);
-                    video.muted = true;
-                    video.play();
+                await player.load(streamUrl);
+                updateTracksInUI();
+                videoEl.play().catch(e => {
+                    console.log('Autoplay requires mute:', e);
+                    videoEl.muted = true;
+                    updateVolumeIcon(0);
+                    videoEl.play();
                 });
+            } else {
+                // Nativní HLS fallback
+                videoEl.src = streamUrl;
+                videoEl.play();
             }
         } catch (e) {
-            console.error('Chyba přehrávače Shaka:', e);
-            // Fallback na nativní HLS přes video element pokud Shaka selže
-            try {
-                const resp = await fetch(`/api/stream/live/${channelId}`);
-                const data = await resp.json();
-                const video = document.getElementById('ct-video');
-                video.src = data.hls_url || data.url;
-                video.play();
-            } catch (err) {
-                console.error('Fallback failed:', err);
+            console.error('Chyba přehrávače:', e);
+            document.getElementById('video-spinner').classList.add('hidden');
+        }
+    }
+
+    function togglePlayPause() {
+        if (!videoEl) return;
+        if (videoEl.paused) {
+            videoEl.play();
+        } else {
+            videoEl.pause();
+        }
+    }
+
+    function toggleMute() {
+        if (!videoEl) return;
+        videoEl.muted = !videoEl.muted;
+        updateVolumeIcon(videoEl.muted ? 0 : videoEl.volume);
+    }
+
+    function changeVolume(val) {
+        if (!videoEl) return;
+        videoEl.volume = parseFloat(val);
+        videoEl.muted = (val == 0);
+        updateVolumeIcon(val);
+    }
+
+    function updateVolumeIcon(vol) {
+        const icon = document.getElementById('volume-icon');
+        const slider = document.getElementById('volume-slider');
+        if (videoEl && videoEl.muted || vol == 0) {
+            icon.className = 'fa-solid fa-volume-xmark text-red-400';
+            if (slider) slider.value = 0;
+        } else if (vol < 0.5) {
+            icon.className = 'fa-solid fa-volume-low text-slate-300';
+            if (slider) slider.value = vol;
+        } else {
+            icon.className = 'fa-solid fa-volume-high text-slate-300';
+            if (slider) slider.value = vol;
+        }
+    }
+
+    function updateTracksInUI() {
+        if (!player) return;
+
+        // 1. Zvukové stopy
+        const audioSelect = document.getElementById('audio-select');
+        const languages = player.getAudioLanguages();
+        if (languages && languages.length > 0) {
+            audioSelect.innerHTML = '';
+            languages.forEach(lang => {
+                const opt = document.createElement('option');
+                opt.value = lang;
+                opt.textContent = (lang === 'cs' || lang === 'cze' || lang === 'ces') ? 'Čeština' : (lang === 'en' ? 'Angličtina / Orig.' : lang.toUpperCase());
+                audioSelect.appendChild(opt);
+            });
+            audioSelect.value = player.getAudioLanguages()[0] || 'cs';
+        }
+
+        // 2. Dostupné kvality
+        const qualitySelect = document.getElementById('quality-select');
+        const tracks = player.getVariantTracks();
+        if (tracks && tracks.length > 0) {
+            qualitySelect.innerHTML = '<option value="auto">Auto</option>';
+            const seenHeights = new Set();
+            const sortedTracks = [...tracks].sort((a, b) => (b.height || 0) - (a.height || 0));
+            sortedTracks.forEach(t => {
+                if (t.height && !seenHeights.has(t.height)) {
+                    seenHeights.add(t.height);
+                    const opt = document.createElement('option');
+                    opt.value = t.height;
+                    opt.textContent = `${t.height}p`;
+                    qualitySelect.appendChild(opt);
+                }
+            });
+        }
+    }
+
+    function changeAudio(lang) {
+        if (!player) return;
+        player.selectAudioLanguage(lang);
+    }
+
+    function changeQuality(heightVal) {
+        if (!player) return;
+        if (heightVal === 'auto') {
+            player.configure({ abr: { enabled: true } });
+        } else {
+            player.configure({ abr: { enabled: false } });
+            const tracks = player.getVariantTracks().filter(t => t.height === parseInt(heightVal));
+            if (tracks.length > 0) {
+                player.selectVariantTrack(tracks[0], true);
             }
         }
     }
+
+    function updateActiveQualityUI() {
+        // Shaka ABR adaptation event
+    }
+
+    function toggleFullscreen() {
+        const container = document.getElementById('video-container');
+        if (!document.fullscreenElement) {
+            container.requestFullscreen().catch(err => {
+                console.error('Fullscreen error:', err);
+            });
+            document.getElementById('fullscreen-icon').className = 'fa-solid fa-compress';
+        } else {
+            document.exitFullscreen();
+            document.getElementById('fullscreen-icon').className = 'fa-solid fa-expand';
+        }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+        const icon = document.getElementById('fullscreen-icon');
+        if (document.fullscreenElement) {
+            icon.className = 'fa-solid fa-compress';
+        } else {
+            icon.className = 'fa-solid fa-expand';
+        }
+    });
 
     function reloadCurrentStream() {
         if (currentChannelId) {

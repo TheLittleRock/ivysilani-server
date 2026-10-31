@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import json
+import time
 from typing import List, Dict, Any, Optional
 import httpx
 from bs4 import BeautifulSoup
@@ -36,6 +37,7 @@ class ArchiveCrawler:
             "is_crawling": False,
             "indexed_shows": 0,
             "current_category": "",
+            "start_time": 0,
             "last_error": None
         }
 
@@ -195,6 +197,7 @@ class ArchiveCrawler:
 
         self.stats["is_crawling"] = True
         self.stats["indexed_shows"] = 0
+        self.stats["start_time"] = int(time.time())
         total_indexed = 0
 
         logger.info("Zahajuji hloubkovou indexaci celého katalogu iVysílání...")
@@ -208,9 +211,20 @@ class ArchiveCrawler:
                 logger.info(f"Kategorie {cat_name} dokončena: +{count} pořadů.")
 
             logger.info(f"Celá indexace iVysílání dokončena! Celkem nalezeno {total_indexed} záznamů.")
+            crud.set_setting("last_crawl_info", json.dumps({
+                "timestamp": int(time.time()),
+                "duration_seconds": int(time.time()) - self.stats["start_time"],
+                "total_indexed": total_indexed,
+                "status": "success"
+            }))
         except Exception as e:
             logger.error(f"Kritická chyba při indexaci: {e}")
             self.stats["last_error"] = str(e)
+            crud.set_setting("last_crawl_info", json.dumps({
+                "timestamp": int(time.time()),
+                "error": str(e),
+                "status": "error"
+            }))
         finally:
             self.stats["is_crawling"] = False
             self.stats["current_category"] = ""
@@ -223,6 +237,28 @@ class ArchiveCrawler:
             return False
         asyncio.create_task(self.crawl_entire_catalog(max_pages_per_category=max_pages_per_category))
         return True
+
+    def start_background_tmdb_enrichment(self) -> bool:
+        """Spustí TMDB obohacení katalogu na pozadí."""
+        asyncio.create_task(self.enrich_all_shows_tmdb())
+        return True
+
+    async def enrich_all_shows_tmdb(self):
+        """Obohatí všechny pořady v databázi o TMDB metadata na pozadí."""
+        from app.services.tmdb_service import tmdb_service
+        shows = crud.list_shows(limit=5000)
+        enriched_count = 0
+        for s in shows:
+            if not s.get("tmdb_id"):
+                try:
+                    res = await tmdb_service.enrich_show_metadata(s)
+                    if res:
+                        enriched_count += 1
+                    await asyncio.sleep(0.15)
+                except Exception:
+                    pass
+        logger.info(f"TMDB enrichment dokončeno: obohaceno {enriched_count} pořadů.")
+        return enriched_count
 
     async def run_periodic_crawler(self):
         """Spouští se při startu a poté v pravidelných intervalech (např. 24h)."""

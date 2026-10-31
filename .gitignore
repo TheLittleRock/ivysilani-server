@@ -34,6 +34,9 @@ env.bak/
 venv.bak/
 
 # SQLite & App Data
+*.db
+*.db-wal
+*.db-shm
 data/*.db
 data/*.db-wal
 data/*.db-shm

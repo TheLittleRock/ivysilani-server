@@ -11,7 +11,7 @@
                 <i class="fa-solid fa-download text-blue-500"></i>
                 <span>Správce stahování na disk</span>
             </h1>
-            <p class="text-xs text-slate-400 mt-0.5">Uložená videa v MP4 na disku serveru (ve složce <code class="text-blue-400">/downloads</code>) pro offline přehrávání.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Uložená videa v MP4 na disku serveru pro offline přehrávání (standardní pojmenování pro Plex/Jellyfin/Kodi).</p>
         </div>
         <button onclick="window.location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3.5 py-2 rounded-xl transition flex items-center space-x-1.5">
             <i class="fa-solid fa-rotate-right"></i>
@@ -34,63 +34,72 @@
 
     <!-- Seznam úloh -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-        {% if tasks %}
-        <div class="space-y-3">
-            {% for t in tasks %}
-            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div class="space-y-1.5 flex-grow">
-                    <div class="flex items-center space-x-2">
+        <div id="tasks-container" class="space-y-3">
+            {% if tasks %}
+                {% for t in tasks %}
+                <div id="task-card-{{ t.id }}" class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div class="space-y-1.5 flex-grow">
+                        <div class="flex items-center space-x-2">
+                            {% if t.status == 'completed' %}
+                            <span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold">DOKONČENO</span>
+                            {% elif t.status == 'downloading' %}
+                            <span class="px-2 py-0.5 bg-blue-950 text-blue-400 border border-blue-800 rounded text-[10px] font-bold animate-pulse">STAHOVÁNÍ</span>
+                            {% elif t.status == 'failed' %}
+                            <span class="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded text-[10px] font-bold">CHYBA</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px] font-bold">{{ t.status|upper }}</span>
+                            {% endif %}
+                            <h4 class="text-sm font-bold text-white">{{ t.title }}</h4>
+                        </div>
+
+                        <!-- Průběh stahování -->
+                        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden max-w-md">
+                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ t.progress }}%"></div>
+                        </div>
+
+                        <div class="text-[11px] text-slate-400 flex flex-wrap items-center gap-3">
+                            <span>Průběh: <strong class="text-white">{{ t.progress }}%</strong></span>
+                            {% if t.speed %}
+                            <span class="text-blue-400 font-medium"><i class="fa-solid fa-gauge-high mr-1"></i>{{ t.speed }}</span>
+                            {% endif %}
+                            {% if t.eta %}
+                            <span class="text-slate-300"><i class="fa-solid fa-clock mr-1"></i>Zbývá: {{ t.eta }}</span>
+                            {% endif %}
+                            {% if t.filesize %}
+                            <span>Velikost: <strong class="text-white">{{ (t.filesize / 1024 / 1024)|round(1) }} MB</strong></span>
+                            {% endif %}
+                            {% if t.filepath %}
+                            <span class="text-slate-500 font-mono text-[10px] truncate max-w-xs">{{ t.filepath }}</span>
+                            {% endif %}
+                            {% if t.error_message %}
+                            <span class="text-red-400">{{ t.error_message }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Tlačítka -->
+                    <div class="flex items-center space-x-2 self-end md:self-auto">
                         {% if t.status == 'completed' %}
-                        <span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold">DOKONČENO</span>
-                        {% elif t.status == 'downloading' %}
-                        <span class="px-2 py-0.5 bg-blue-950 text-blue-400 border border-blue-800 rounded text-[10px] font-bold animate-pulse">STAHOVÁNÍ</span>
-                        {% elif t.status == 'failed' %}
-                        <span class="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded text-[10px] font-bold">CHYBA</span>
-                        {% else %}
-                        <span class="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px] font-bold">{{ t.status|upper }}</span>
+                        <button onclick="playLocalFile('{{ t.id }}', '{{ t.title }}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5">
+                            <i class="fa-solid fa-play text-[10px]"></i>
+                            <span>Přehrát z disku</span>
+                        </button>
                         {% endif %}
-                        <h4 class="text-sm font-bold text-white">{{ t.title }}</h4>
-                    </div>
-
-                    <!-- Průběh stahování -->
-                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden max-w-md">
-                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ t.progress }}%"></div>
-                    </div>
-
-                    <div class="text-[11px] text-slate-400 flex items-center space-x-3">
-                        <span>Průběh: <strong class="text-white">{{ t.progress }}%</strong></span>
-                        {% if t.filesize %}
-                        <span>Velikost: <strong class="text-white">{{ (t.filesize / 1024 / 1024)|round(1) }} MB</strong></span>
-                        {% endif %}
-                        {% if t.error_message %}
-                        <span class="text-red-400">{{ t.error_message }}</span>
-                        {% endif %}
+                        <button onclick="deleteTask('{{ t.id }}')" class="px-3 py-1.5 bg-slate-800 hover:bg-red-900/60 text-slate-400 hover:text-red-200 text-xs font-semibold rounded-lg transition" title="Smazat soubor i úlohu">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
                     </div>
                 </div>
-
-                <!-- Tlačítka -->
-                <div class="flex items-center space-x-2 self-end md:self-auto">
-                    {% if t.status == 'completed' %}
-                    <button onclick="playLocalFile('{{ t.id }}', '{{ t.title }}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5">
-                        <i class="fa-solid fa-play text-[10px]"></i>
-                        <span>Přehrát z disku</span>
-                    </button>
-                    {% endif %}
-                    <button onclick="deleteTask('{{ t.id }}')" class="px-3 py-1.5 bg-slate-800 hover:bg-red-900/60 text-slate-400 hover:text-red-200 text-xs font-semibold rounded-lg transition" title="Smazat soubor i úlohu">
-                        <i class="fa-solid fa-trash-can"></i>
-                    </button>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-10 space-y-2">
+                    <div class="text-slate-700 text-4xl">
+                        <i class="fa-solid fa-cloud-arrow-down"></i>
+                    </div>
+                    <p class="text-xs text-slate-400">Zatím jste nestáhli žádné pořady. V katalogu archivu stačí u kterékoliv epizody kliknout na tlačítko <strong>Stáhnout</strong>.</p>
                 </div>
-            </div>
-            {% endfor %}
+            {% endif %}
         </div>
-        {% else %}
-        <div class="text-center py-10 space-y-2">
-            <div class="text-slate-700 text-4xl">
-                <i class="fa-solid fa-cloud-arrow-down"></i>
-            </div>
-            <p class="text-xs text-slate-400">Zatím jste nestáhli žádné pořady. V katalogu archivu stačí u kterékoliv epizody kliknout na tlačítko <strong>Stáhnout</strong>.</p>
-        </div>
-        {% endif %}
     </div>
 
 </div>
@@ -121,5 +130,32 @@
             alert('Chyba při mazání úlohy.');
         }
     }
+
+    // Auto-refresh stavu úloh každé 2 sekundy, pokud některé běží
+    let pollInterval = setInterval(async () => {
+        try {
+            const resp = await fetch('/api/downloads/list');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const tasks = data.tasks || [];
+            
+            const hasActive = tasks.some(t => t.status === 'downloading' || t.status === 'pending');
+            if (hasActive) {
+                // Aktualizujeme prvky na stránce
+                tasks.forEach(t => {
+                    const card = document.getElementById(`task-card-${t.id}`);
+                    if (card) {
+                        const bar = card.querySelector('.bg-blue-600');
+                        if (bar) bar.style.width = `${t.progress}%`;
+                    } else {
+                        // Pokud přibyla nová úloha, reloadujeme
+                        window.location.reload();
+                    }
+                });
+            }
+        } catch (e) {
+            // Ignorovat síťové chyby
+        }
+    }, 2000);
 </script>
 {% endblock %}

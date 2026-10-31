@@ -128,14 +128,18 @@ def upsert_show(
     year: str = "",
     show_type: str = "series",
     is_playable: bool = True,
-    total_episodes: int = 0
+    total_episodes: int = 0,
+    tmdb_id: Optional[str] = None,
+    imdb_id: Optional[str] = None,
+    tmdb_poster: Optional[str] = None,
+    tmdb_backdrop: Optional[str] = None
 ):
     with get_db() as conn:
         cursor = conn.cursor()
         now = int(time.time())
         cursor.execute("""
-        INSERT INTO shows (id, title, slug, description, image_url, poster_url, backdrop_url, logo_url, genre, year, show_type, is_playable, total_episodes, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO shows (id, title, slug, description, image_url, poster_url, backdrop_url, logo_url, genre, year, show_type, is_playable, total_episodes, updated_at, tmdb_id, imdb_id, tmdb_poster, tmdb_backdrop)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title,
             slug=excluded.slug,
@@ -149,11 +153,16 @@ def upsert_show(
             show_type=excluded.show_type,
             is_playable=excluded.is_playable,
             total_episodes=excluded.total_episodes,
-            updated_at=excluded.updated_at
+            updated_at=excluded.updated_at,
+            tmdb_id=COALESCE(excluded.tmdb_id, shows.tmdb_id),
+            imdb_id=COALESCE(excluded.imdb_id, shows.imdb_id),
+            tmdb_poster=COALESCE(excluded.tmdb_poster, shows.tmdb_poster),
+            tmdb_backdrop=COALESCE(excluded.tmdb_backdrop, shows.tmdb_backdrop)
         """, (
             show_id, title, slug, description, image_url,
             poster_url or image_url, backdrop_url or image_url, logo_url,
-            genre, year, show_type, 1 if is_playable else 0, total_episodes, now
+            genre, year, show_type, 1 if is_playable else 0, total_episodes, now,
+            tmdb_id, imdb_id, tmdb_poster, tmdb_backdrop
         ))
 
 def upsert_episode(
@@ -189,6 +198,44 @@ def upsert_episode(
             is_drm=excluded.is_drm
         """, (ep_id, show_id, idec, title, description, image_url, duration, season, episode_num, broadcast_date, 1 if is_playable else 0, 1 if is_drm else 0))
 
+def get_setting(key: str, default: str = "") -> str:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row["value"] if row and row["value"] is not None else default
+
+def set_setting(key: str, value: str) -> None:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+def get_show_by_imdb_id(imdb_id: str) -> Optional[Dict[str, Any]]:
+    if not imdb_id:
+        return None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM shows WHERE imdb_id = ?", (imdb_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def get_show_by_tmdb_id(tmdb_id: str) -> Optional[Dict[str, Any]]:
+    if not tmdb_id:
+        return None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM shows WHERE tmdb_id = ?", (str(tmdb_id),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def update_show_tmdb(show_id: str, tmdb_id: str, imdb_id: str, tmdb_poster: str = "", tmdb_backdrop: str = "") -> bool:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE shows SET tmdb_id = ?, imdb_id = ?, tmdb_poster = ?, tmdb_backdrop = ? WHERE id = ?
+        """, (tmdb_id, imdb_id, tmdb_poster, tmdb_backdrop, show_id))
+        return cursor.rowcount > 0
+
 def mark_show_playable(show_id: str, is_playable: bool):
     with get_db() as conn:
         cursor = conn.cursor()
@@ -207,12 +254,24 @@ def list_shows(
         query = "SELECT * FROM shows"
         params = []
         conditions = []
-        if genre and genre != "all":
-            conditions.append("genre LIKE ?")
-            params.append(f"%{genre}%")
-        if show_type:
+
+        effective_show_type = show_type
+        if genre:
+            g_low = genre.lower().strip()
+            if g_low in ["filmy", "film"]:
+                effective_show_type = "movie"
+            elif g_low in ["seriály", "serialy", "seriál", "serial"]:
+                effective_show_type = "series"
+            elif g_low in ["dokumenty", "dokument"]:
+                conditions.append("(genre LIKE '%Dokument%' OR genre LIKE '%Publicistika%')")
+            elif g_low not in ["all", "vše", "vse"]:
+                conditions.append("genre LIKE ?")
+                params.append(f"%{genre}%")
+
+        if effective_show_type:
             conditions.append("show_type = ?")
-            params.append(show_type)
+            params.append(effective_show_type)
+
         if only_playable:
             conditions.append("is_playable = 1")
         if search:
@@ -243,12 +302,24 @@ def count_shows(
         query = "SELECT COUNT(*) as cnt FROM shows"
         params = []
         conditions = []
-        if genre and genre != "all":
-            conditions.append("genre LIKE ?")
-            params.append(f"%{genre}%")
-        if show_type:
+
+        effective_show_type = show_type
+        if genre:
+            g_low = genre.lower().strip()
+            if g_low in ["filmy", "film"]:
+                effective_show_type = "movie"
+            elif g_low in ["seriály", "serialy", "seriál", "serial"]:
+                effective_show_type = "series"
+            elif g_low in ["dokumenty", "dokument"]:
+                conditions.append("(genre LIKE '%Dokument%' OR genre LIKE '%Publicistika%')")
+            elif g_low not in ["all", "vše", "vse"]:
+                conditions.append("genre LIKE ?")
+                params.append(f"%{genre}%")
+
+        if effective_show_type:
             conditions.append("show_type = ?")
-            params.append(show_type)
+            params.append(effective_show_type)
+
         if only_playable:
             conditions.append("is_playable = 1")
         if search:

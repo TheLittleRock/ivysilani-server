@@ -174,3 +174,44 @@ def test_image_proxy_endpoint():
     resp = client.get("/api/image-proxy?url=https://www.ceskatelevize.cz/favicon.ico")
     assert resp.status_code == 200
 
+def test_subtitle_proxy_endpoint():
+    # CORS headers and proxying
+    resp = client.get("/api/subtitles?url=https://www.ceskatelevize.cz/favicon.ico")
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "*"
+
+def test_downloads_list_api():
+    resp = client.get("/api/downloads/list", cookies=AUTH_COOKIES)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "tasks" in data
+    assert isinstance(data["tasks"], list)
+
+def test_stremio_tmdb_id_pairing():
+    # Insert a show with TMDB / IMDb IDs
+    crud.upsert_show(
+        show_id="12155281075",
+        title="Bod obnovy",
+        description="Sci-fi thriller",
+        show_type="movie",
+        tmdb_id="1071815",
+        imdb_id="tt9362492",
+        tmdb_poster="https://image.tmdb.org/t/p/w500/test.jpg"
+    )
+    crud.upsert_episode(
+        ep_id="21951212035",
+        show_id="12155281075",
+        title="Bod obnovy",
+        idec="21951212035"
+    )
+    
+    # Check meta resolution via IMDb ID
+    meta_resp = client.get("/stremio/meta/movie/tt9362492.json")
+    assert meta_resp.status_code == 200
+    meta_data = meta_resp.json()
+    assert "meta" in meta_data
+    assert meta_data["meta"]["name"] == "Bod obnovy"
+    assert meta_data["meta"]["id"] == "tt9362492"
+    assert "poster" in meta_data["meta"]
+
+
