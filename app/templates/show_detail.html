@@ -29,13 +29,18 @@
         </div>
     </div>
 
-    <!-- Karta pořadu -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row gap-6">
-        <!-- Obrázek -->
-        <div class="w-full md:w-72 flex-shrink-0">
-            <div class="aspect-[16/9] md:aspect-[3/2] w-full rounded-xl overflow-hidden bg-slate-950 shadow-md">
-                {% if show.image_url %}
-                <img src="{{ show.image_url }}" alt="{{ show.title }}" class="w-full h-full object-cover" />
+    <!-- Karta pořadu / filmu -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row gap-6 relative overflow-hidden">
+        <!-- Pozadí (backdrop) jemně prosvítající -->
+        {% if show.backdrop_url %}
+        <div class="absolute inset-0 opacity-10 bg-cover bg-center pointer-events-none" style="background-image: url('{{ show.backdrop_url }}');"></div>
+        {% endif %}
+
+        <!-- Obrázek / Plakát -->
+        <div class="w-full md:w-64 flex-shrink-0 z-10">
+            <div class="aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-950 shadow-md border border-slate-800">
+                {% if show.poster_url or show.image_url %}
+                <img src="{{ show.poster_url or show.image_url }}" alt="{{ show.title }}" class="w-full h-full object-cover" />
                 {% else %}
                 <div class="w-full h-full flex items-center justify-center text-slate-700 text-4xl">
                     <i class="fa-solid fa-film"></i>
@@ -45,77 +50,179 @@
         </div>
 
         <!-- Popis a metadata -->
-        <div class="flex-grow space-y-3">
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-1 bg-blue-950 text-blue-400 border border-blue-800 rounded-full text-xs font-semibold">
-                    {{ show.genre or 'Pořad' }}
-                </span>
-                {% if show.year %}
-                <span class="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-full text-xs font-medium">
-                    Rok: {{ show.year }}
-                </span>
+        <div class="flex-grow space-y-3 z-10 flex flex-col justify-between">
+            <div class="space-y-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="px-2.5 py-1 bg-blue-950 text-blue-400 border border-blue-800 rounded-full text-xs font-semibold">
+                        {{ 'Film' if show.show_type == 'movie' else 'Seriál' }}
+                    </span>
+                    {% if show.genre %}
+                    <span class="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-full text-xs font-medium">
+                        {{ show.genre }}
+                    </span>
+                    {% endif %}
+                    {% if show.year %}
+                    <span class="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-full text-xs font-medium">
+                        Rok: {{ show.year }}
+                    </span>
+                    {% endif %}
+                    {% if show.show_type == 'series' %}
+                    <span class="text-xs text-slate-400">
+                        Sérií: {{ sorted_seasons|length }} &bull; Epizod: {{ episodes|length }}
+                    </span>
+                    {% elif episodes and episodes[0].duration %}
+                    <span class="text-xs text-slate-400">
+                        Stopáž: {{ (episodes[0].duration / 60)|round|int }} min
+                    </span>
+                    {% endif %}
+
+                    {% if not show.is_playable %}
+                    <span class="px-2.5 py-1 bg-rose-950 text-rose-300 border border-rose-800 rounded-full text-xs font-semibold">
+                        <i class="fa-solid fa-clock-rotate-left mr-1"></i> Expirováno (Nedostupné v archivu ČT)
+                    </span>
+                    {% endif %}
+                </div>
+
+                <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">{{ show.title }}</h1>
+                <p class="text-sm text-slate-300 leading-relaxed max-w-3xl">{{ show.description }}</p>
+            </div>
+
+            <!-- Tlačítka hlavní akce -->
+            <div class="pt-4 flex flex-wrap items-center gap-3">
+                {% if show.show_type == 'movie' %}
+                    {% if episodes and show.is_playable and episodes[0].is_playable %}
+                    <button onclick="playEpisode('{{ episodes[0].idec }}', '{{ show.title|replace('\'', '\\\'') }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-6 py-3 rounded-xl transition inline-flex items-center space-x-2 shadow-lg shadow-blue-600/30">
+                        <i class="fa-solid fa-play"></i>
+                        <span>Přehrát film</span>
+                    </button>
+                    <button onclick="downloadEpisode('{{ episodes[0].idec }}', '{{ show.title|replace('\'', '\\\'') }}')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold px-4 py-3 rounded-xl transition inline-flex items-center space-x-2 border border-slate-700">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Stáhnout film</span>
+                    </button>
+                    {% else %}
+                    <span class="text-xs bg-slate-800 text-slate-400 px-4 py-2.5 rounded-xl border border-slate-700 inline-flex items-center space-x-2">
+                        <i class="fa-solid fa-lock text-rose-400"></i>
+                        <span>Tento film již není na iVysílání dostupný k přehrání</span>
+                    </span>
+                    {% endif %}
+                {% else %}
+                    {% if episodes %}
+                    <button onclick="playEpisode('{{ episodes[0].idec }}', '{{ episodes[0].title|replace('\'', '\\\'') }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-6 py-3 rounded-xl transition inline-flex items-center space-x-2 shadow-lg shadow-blue-600/30">
+                        <i class="fa-solid fa-play"></i>
+                        <span>Přehrát 1. díl</span>
+                    </button>
+                    {% endif %}
                 {% endif %}
-                <span class="text-xs text-slate-500">
-                    Celkem dílů: {{ episodes|length }}
-                </span>
             </div>
-
-            <h1 class="text-2xl font-black text-white">{{ show.title }}</h1>
-            <p class="text-sm text-slate-300 leading-relaxed">{{ show.description }}</p>
-
-            {% if episodes %}
-            <div class="pt-2">
-                <button onclick="playEpisode('{{ episodes[0].idec }}', '{{ episodes[0].title|replace('\'', '\\\'') }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition inline-flex items-center space-x-2 shadow-lg shadow-blue-600/20">
-                    <i class="fa-solid fa-play"></i>
-                    <span>Přehrát nejnovější díl</span>
-                </button>
-            </div>
-            {% endif %}
         </div>
     </div>
 
-    <!-- Seznam epizod -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-        <h2 class="text-lg font-bold text-white flex items-center space-x-2">
-            <i class="fa-solid fa-list-ul text-blue-500"></i>
-            <span>Dostupné díly a epizody</span>
-        </h2>
+    <!-- Sekce epizod (pouze pro seriály) -->
+    {% if show.show_type == 'series' %}
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 class="text-lg font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-layer-group text-blue-500"></i>
+                <span>Epizody seriálu</span>
+            </h2>
+
+            <!-- Přepínač sérií (Tabs) -->
+            {% if sorted_seasons|length > 1 %}
+            <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 custom-scrollbar text-xs">
+                <button onclick="filterSeason('all')" id="tab-season-all" class="season-tab px-3.5 py-1.5 rounded-xl font-semibold transition bg-blue-600 text-white">
+                    Všechny díly
+                </button>
+                {% for sn in sorted_seasons %}
+                <button onclick="filterSeason('{{ sn }}')" id="tab-season-{{ sn }}" class="season-tab px-3.5 py-1.5 rounded-xl font-semibold transition bg-slate-800 text-slate-300 hover:bg-slate-700">
+                    {{ sn }}. řada
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
 
         {% if episodes %}
-        <div class="space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="episodes-container">
             {% for ep in episodes %}
-            <div class="bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 rounded-xl p-4 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div class="flex items-center space-x-3.5">
-                    <div class="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 text-blue-400 flex items-center justify-center font-bold text-sm shrink-0">
-                        {{ ep.episode_num or loop.index }}
+            {% set s_num = ep.season or 1 %}
+            <div class="episode-card bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 rounded-xl p-4 transition flex flex-col justify-between gap-3 {% if not ep.is_playable %}opacity-60{% endif %}" data-season="{{ s_num }}">
+                <div class="flex items-start space-x-3.5">
+                    <!-- Náhled dílu -->
+                    <div class="w-24 sm:w-28 aspect-video bg-slate-900 rounded-lg overflow-hidden border border-slate-800 shrink-0 relative">
+                        {% if ep.image_url or show.image_url %}
+                        <img src="{{ ep.image_url or show.image_url }}" alt="{{ ep.title }}" class="w-full h-full object-cover" loading="lazy" />
+                        {% else %}
+                        <div class="w-full h-full flex items-center justify-center text-slate-700 text-sm">
+                            <i class="fa-solid fa-play"></i>
+                        </div>
+                        {% endif %}
+                        <span class="absolute bottom-1 right-1 bg-black/80 text-[9px] font-bold text-slate-300 px-1 py-0.2 rounded">
+                            {{ s_num }}/{{ ep.episode_num or loop.index }}
+                        </span>
                     </div>
-                    <div>
-                        <h4 class="text-sm font-bold text-white">{{ ep.title }}</h4>
-                        <div class="text-xs text-slate-400 mt-0.5 line-clamp-1">
-                            IDEC: <span class="text-slate-300 font-mono">{{ ep.idec }}</span>
-                            {% if ep.duration %} &bull; {{ (ep.duration / 60)|round|int }} min{% endif %}
+
+                    <div class="min-w-0 flex-grow">
+                        <div class="flex items-center space-x-1.5">
+                            <h4 class="text-sm font-bold text-white truncate">{{ ep.title }}</h4>
+                        </div>
+                        <div class="text-[11px] text-slate-400 mt-0.5">
+                            <span>{{ s_num }}. řada, {{ ep.episode_num or loop.index }}. díl</span>
+                            {% if ep.duration %} &bull; <span>{{ (ep.duration / 60)|round|int }} min</span>{% endif %}
+                        </div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                            IDEC: {{ ep.idec }}
                         </div>
                     </div>
                 </div>
 
+                {% if ep.description %}
+                <p class="text-xs text-slate-400 line-clamp-2">{{ ep.description }}</p>
+                {% endif %}
+
                 <!-- Tlačítka přehrát / stáhnout -->
-                <div class="flex items-center space-x-2 self-end sm:self-auto">
-                    <button onclick="playEpisode('{{ ep.idec }}', '{{ ep.title|replace('\'', '\\\'') }}')" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 shadow">
-                        <i class="fa-solid fa-play text-[10px]"></i>
-                        <span>Přehrát</span>
-                    </button>
-                    <button onclick="downloadEpisode('{{ ep.idec }}', '{{ show.title|replace('\'', '\\\'') }} - {{ ep.title|replace('\'', '\\\'') }}')" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5" title="Stáhnout na disk serveru">
-                        <i class="fa-solid fa-download text-[10px]"></i>
-                        <span>Stáhnout</span>
-                    </button>
+                <div class="pt-2 border-t border-slate-900 flex items-center justify-between">
+                    <div>
+                        {% if not ep.is_playable %}
+                        <span class="text-[10px] text-rose-400 font-medium flex items-center space-x-1">
+                            <i class="fa-solid fa-ban"></i>
+                            <span>Expirováno</span>
+                        </span>
+                        {% elif ep.is_drm %}
+                        <span class="text-[10px] text-blue-400 font-medium flex items-center space-x-1">
+                            <i class="fa-solid fa-lock"></i>
+                            <span>Widevine DRM</span>
+                        </span>
+                        {% else %}
+                        <span class="text-[10px] text-emerald-400 font-medium flex items-center space-x-1">
+                            <i class="fa-solid fa-check"></i>
+                            <span>HLS Stream</span>
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        {% if ep.is_playable %}
+                        <button onclick="playEpisode('{{ ep.idec }}', '{{ ep.title|replace('\'', '\\\'') }}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 shadow">
+                            <i class="fa-solid fa-play text-[9px]"></i>
+                            <span>Přehrát</span>
+                        </button>
+                        <button onclick="downloadEpisode('{{ ep.idec }}', '{{ show.title|replace('\'', '\\\'') }} - {{ ep.title|replace('\'', '\\\'') }}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5" title="Stáhnout na disk serveru">
+                            <i class="fa-solid fa-download text-[9px]"></i>
+                            <span>Stáhnout</span>
+                        </button>
+                        {% else %}
+                        <span class="text-xs text-slate-600 italic">Nedostupné</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-xs text-slate-400">Pro tento pořad nejsou zatím v databázi evidovány žádné konkrétní epizody.</p>
+        <p class="text-xs text-slate-400">Pro tento seriál nejsou v databázi evidovány žádné epizody.</p>
         {% endif %}
     </div>
+    {% endif %}
 
 </div>
 {% endblock %}
@@ -143,13 +250,18 @@
                 'play_pause',
                 'time_and_duration',
                 'spacer',
-                'mute',
                 'volume',
                 'quality',
                 'captions',
-                'fullscreen',
-                'overflow_menu'
-            ]
+                'overflow_menu',
+                'fullscreen'
+            ],
+            overflowMenuButtons: [
+                'quality',
+                'language',
+                'playback_rate'
+            ],
+            trackLabelFormat: (window.shaka && shaka.ui && shaka.ui.TrackLabelFormat) ? shaka.ui.TrackLabelFormat.RESOLUTION : 2
         });
 
         player.addEventListener('error', (event) => {
@@ -199,8 +311,30 @@
             }
 
             await player.load(data.url);
+
+            // Načtení externích WebVTT titulků pokud existují
+            if (data.subtitles && data.subtitles.length > 0) {
+                for (const sub of data.subtitles) {
+                    try {
+                        await player.addTextTrackAsync(
+                            sub.url,
+                            sub.lang || 'cs',
+                            'subtitles',
+                            'text/vtt',
+                            null,
+                            sub.label || 'Čeština'
+                        );
+                    } catch (subErr) {
+                        console.warn('Nepodařilo se přidat titulky:', subErr);
+                    }
+                }
+                player.setTextTrackVisibility(true);
+            }
+
             const video = document.getElementById('vod-video');
-            video.play();
+            video.play().catch(e => {
+                console.log('Autoplay blocked:', e);
+            });
         } catch (e) {
             console.error('Chyba při přehrávání dílu:', e);
             statusEl.innerHTML = '<span class="text-red-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Chyba při spouštění přehrávání.</span>';
@@ -216,6 +350,27 @@
             player.unload();
         }
         document.getElementById('player-card').classList.add('hidden');
+    }
+
+    function filterSeason(seasonNum) {
+        document.querySelectorAll('.season-tab').forEach(b => {
+            b.classList.remove('bg-blue-600', 'text-white');
+            b.classList.add('bg-slate-800', 'text-slate-300');
+        });
+        const activeTab = document.getElementById(`tab-season-${seasonNum}`);
+        if (activeTab) {
+            activeTab.classList.remove('bg-slate-800', 'text-slate-300');
+            activeTab.classList.add('bg-blue-600', 'text-white');
+        }
+
+        const cards = document.querySelectorAll('.episode-card');
+        cards.forEach(card => {
+            if (seasonNum === 'all' || card.getAttribute('data-season') === String(seasonNum)) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
     }
 
     async function downloadEpisode(idec, title) {
@@ -235,7 +390,7 @@
             if (data.status === 'ok') {
                 alert('Stahování bylo zařazeno do fronty! Průběh můžete sledovat v záložce Stahování.');
             } else {
-                alert('Chyba při přidávání stahování.');
+                alert('Chyba při přidávání stahování: ' + (data.detail || 'Neznámá chyba'));
             }
         } catch (e) {
             alert('Chyba spojení se serverem.');

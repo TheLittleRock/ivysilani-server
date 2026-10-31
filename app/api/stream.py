@@ -1,10 +1,27 @@
+from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, Response
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, FileResponse
 from app.services.ct_service import ct_service
 from app.services.drm_proxy import drm_session_manager
+from app.services.image_proxy import image_proxy
 from app.core.config import settings
 
 router = APIRouter(prefix="/api")
+
+@router.get("/image-proxy")
+async def get_image_proxy(url: str):
+    content, media_type = await image_proxy.fetch_image(url)
+    if not content:
+        fallback = Path("app/static/logos/ct1.png")
+        if fallback.exists():
+            return FileResponse(str(fallback), media_type="image/png")
+        raise HTTPException(status_code=404, detail="Image not found")
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=604800, immutable"}
+    )
+
 
 @router.get("/stream/live/{channel_id}")
 async def get_live_stream_info(request: Request, channel_id: str):

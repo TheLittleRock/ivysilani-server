@@ -1,4 +1,5 @@
 import re
+import urllib.parse
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -6,6 +7,8 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.db import crud
 from app.services.ct_service import ct_service, LIVE_CHANNELS
+from app.services.image_proxy import image_proxy
+from app.api.xtream import CHANNEL_STREAM_MAP, CHANNEL_ID_TO_STREAM_ID
 
 router = APIRouter(prefix="/stremio")
 
@@ -26,20 +29,47 @@ def cors_response(data: dict) -> JSONResponse:
         }
     )
 
-@router.options("/{full_path:path}")
-async def stremio_options(full_path: str):
-    return cors_response({})
+def get_user_for_token(token: Optional[str]) -> dict:
+    """Najde uživatele podle tokenu, jinak vrátí výchozího administrátora."""
+    if token:
+        user = crud.get_user_by_token(token)
+        if user:
+            return user
+    
+    admin = crud.get_user_by_username("admin")
+    if admin:
+        return admin
+    
+    users = crud.list_users()
+    if users:
+        return users[0]
+        
+    return {
+        "username": "admin",
+        "user_token": settings.DEFAULT_ADMIN_PASSWORD
+    }
 
-@router.get("/manifest.json")
-async def stremio_manifest(request: Request):
-    base_url = get_base_url(request)
-    manifest = {
+def parse_extra(extra_path: Optional[str]) -> dict:
+    extra = {}
+    if not extra_path:
+        return extra
+    parts = extra_path.split("/")
+    for p in parts:
+        if "=" in p:
+            k, v = p.split("=", 1)
+            v = v.replace(".json", "")
+            extra[k] = urllib.parse.unquote(v)
+    return extra
+
+def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
+    token_suffix = f"/{token}" if token else ""
+    return {
         "id": "cz.thelittlerock.ivysilani",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "name": "Česká televize (iVysílání)",
         "description": "Oficiální kanály živého vysílání (ČT1, ČT2, ČT24, ČT sport...) a kompletní archiv iVysílání.",
-        "logo": f"{base_url}/static/logos/ct1.svg",
-        "background": f"{base_url}/static/logos/ct1.svg",
+        "logo": f"{base_url}/static/logos/ct1.png",
+        "background": f"{base_url}/static/logos/ct1.png",
         "resources": ["catalog", "meta", "stream"],
         "types": ["tv", "series", "movie"],
         "idPrefixes": ["ct_"],
@@ -54,7 +84,13 @@ async def stremio_manifest(request: Request):
                 "id": "ct_series",
                 "name": "iVysílání: Seriály",
                 "extra": [
-                    {"name": "genre", "options": ["Krimi", "Drama", "Komedie", "Historický", "Klasika"]},
+                    {
+                        "name": "genre",
+                        "options": [
+                            "Přehled", "Krimi", "Komedie", "České", "Zahraniční", "Rodinné",
+                            "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
+                        ]
+                    },
                     {"name": "search"},
                     {"name": "skip"}
                 ]
@@ -64,7 +100,15 @@ async def stremio_manifest(request: Request):
                 "id": "ct_movies",
                 "name": "iVysílání: Filmy",
                 "extra": [
-                    {"name": "genre", "options": ["Drama", "Komedie", "Pohádka", "Historický", "Thriller"]},
+                    {
+                        "name": "genre",
+                        "options": [
+                            "Přehled", "Krimi", "Komedie", "Zahraniční", "České", "Pohádky",
+                            "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
+                            "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
+                            "Válečné", "Studentské"
+                        ]
+                    },
                     {"name": "search"},
                     {"name": "skip"}
                 ]
@@ -80,6 +124,21 @@ async def stremio_manifest(request: Request):
             },
             {
                 "type": "series",
+                "id": "ct_entertainment",
+                "name": "iVysílání: Zábava",
+                "extra": [
+                    {
+                        "name": "genre",
+                        "options": [
+                            "Přehled", "Talk show", "Soutěže", "Hudební", "Reality show", "Klasika"
+                        ]
+                    },
+                    {"name": "search"},
+                    {"name": "skip"}
+                ]
+            },
+            {
+                "type": "series",
                 "id": "ct_kids",
                 "name": "iVysílání: Pro děti",
                 "extra": [
@@ -89,27 +148,25 @@ async def stremio_manifest(request: Request):
             }
         ]
     }
-    return cors_response(manifest)
 
-# Helper to parse extra path parameters (e.g. /genre=Krimi/skip=20)
-def parse_extra(extra_path: Optional[str]) -> dict:
-    extra = {}
-    if not extra_path:
-        return extra
-    parts = extra_path.split("/")
-    for p in parts:
-        if "=" in p:
-            k, v = p.split("=", 1)
-            extra[k] = v.replace(".json", "")
-    return extra
+@router.options("/{full_path:path}")
+async def stremio_options(full_path: str):
+    return cors_response({})
 
-@router.get("/catalog/{type}/{id}.json")
-@router.get("/catalog/{type}/{id}/{extra:path}")
-async def stremio_catalog(request: Request, type: str, id: str, extra: Optional[str] = None):
+# --- Manifest ---
+@router.get("/manifest.json")
+async def stremio_manifest_default(request: Request):
+    return cors_response(build_manifest(get_base_url(request), None))
+
+@router.get("/{token}/manifest.json")
+async def stremio_manifest_token(request: Request, token: str):
+    return cors_response(build_manifest(get_base_url(request), token))
+
+# --- Catalog ---
+async def handle_catalog(request: Request, type: str, id: str, token: Optional[str] = None, extra: Optional[str] = None):
     base_url = get_base_url(request)
     params = parse_extra(extra)
     
-    # Query parameters fallback
     genre = params.get("genre") or request.query_params.get("genre")
     search = params.get("search") or request.query_params.get("search")
     skip_str = params.get("skip") or request.query_params.get("skip", "0")
@@ -122,17 +179,11 @@ async def stremio_catalog(request: Request, type: str, id: str, extra: Optional[
 
     # 1. Živé vysílání
     if id == "ct_live":
-        for s_id, ch_code in [
-            (1, "CH_1"), (2, "CH_2"), (3, "CH_24"), (4, "CH_4"),
-            (5, "CH_5"), (6, "CH_6"), (25, "CH_25"), (26, "CH_26"),
-            (27, "CH_27"), (28, "CH_28"), (29, "CH_29"), (30, "CH_30"),
-            (31, "CH_31"), (32, "CH_32")
-        ]:
+        for s_id, ch_code in CHANNEL_STREAM_MAP.items():
             ch = LIVE_CHANNELS.get(ch_code)
             if ch:
-                logo_url = ch["logo"]
-                if logo_url.startswith("/"):
-                    logo_url = f"{base_url}{logo_url}"
+                logo_rel = ch.get("logo_png") or ch["logo"]
+                logo_url = f"{base_url}{logo_rel}"
                 metas.append({
                     "id": f"ct_live_{ch_code}",
                     "type": "tv",
@@ -144,27 +195,66 @@ async def stremio_catalog(request: Request, type: str, id: str, extra: Optional[
                 })
         return cors_response({"metas": metas})
 
-    # 2. Katalog pořadů a filmů
-    genre_filter = genre
-    if id == "ct_movies" and not genre_filter:
-        genre_filter = "Film"
-    elif id == "ct_series" and not genre_filter:
-        genre_filter = "Seriál"
-    elif id == "ct_documentaries":
-        genre_filter = "Dokument"
-    elif id == "ct_kids":
-        genre_filter = "Pro děti"
+    # 2. VOD Katalogy
+    genre_filter = genre if (genre and genre != "Přehled") else None
+    show_type = None
 
-    shows = crud.list_shows(genre=genre_filter, search=search, limit=60, offset=skip)
+    if id == "ct_series":
+        show_type = "series"
+    elif id == "ct_movies":
+        show_type = "movie"
+    elif id == "ct_documentaries":
+        if not genre_filter:
+            genre_filter = "Dokument"
+    elif id == "ct_entertainment":
+        if not genre_filter:
+            genre_filter = "Zábava"
+    elif id == "ct_kids":
+        if not genre_filter:
+            genre_filter = "Děti"
+
+    # Hledání v lokální DB (pouze hratelné položky)
+    shows = crud.list_shows(
+        genre=genre_filter,
+        show_type=show_type,
+        only_playable=True,
+        search=search,
+        limit=60,
+        offset=skip
+    )
+
+    # Pokud uživatel vyhledává a v lokální DB není dostatek výsledků, prohledáme přímo GraphQL ČT
+    if search and len(shows) < 5:
+        try:
+            external_results = await ct_service.search_shows_graphql(search, limit=20)
+            seen_ids = {s["id"] for s in shows}
+            for res in external_results:
+                sidp = res.get("sidp")
+                if sidp and sidp not in seen_ids:
+                    # Rychle zinicializujeme metadata pořadu na pozadí
+                    show_meta = await ct_service.scrape_show_metadata(sidp)
+                    if show_meta and show_meta.get("is_playable", True):
+                        shows.append(show_meta)
+                        seen_ids.add(sidp)
+        except Exception:
+            pass
+
     for s in shows:
-        img = s.get("image_url") or f"{base_url}/static/logos/ct1.svg"
+        poster_raw = s.get("poster_url") or s.get("image_url")
+        backdrop_raw = s.get("backdrop_url") or poster_raw
+        
+        poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+        backdrop_url = image_proxy.build_proxy_url(base_url, backdrop_raw)
+
         genres_list = [g.strip() for g in s.get("genre", "").split(",") if g.strip()]
+        s_type = "movie" if s.get("show_type") == "movie" else "series"
+
         metas.append({
             "id": f"ct_show_{s['id']}",
-            "type": type,
+            "type": s_type,
             "name": s["title"],
-            "poster": img,
-            "background": img,
+            "poster": poster_url,
+            "background": backdrop_url,
             "description": s.get("description", ""),
             "releaseInfo": str(s.get("year") or ""),
             "genres": genres_list or ["iVysílání"]
@@ -172,8 +262,18 @@ async def stremio_catalog(request: Request, type: str, id: str, extra: Optional[
 
     return cors_response({"metas": metas})
 
-@router.get("/meta/{type}/{id}.json")
-async def stremio_meta(request: Request, type: str, id: str):
+@router.get("/catalog/{type}/{id}.json")
+@router.get("/catalog/{type}/{id}/{extra:path}")
+async def stremio_catalog_default(request: Request, type: str, id: str, extra: Optional[str] = None):
+    return await handle_catalog(request, type, id, token=None, extra=extra)
+
+@router.get("/{token}/catalog/{type}/{id}.json")
+@router.get("/{token}/catalog/{type}/{id}/{extra:path}")
+async def stremio_catalog_token(request: Request, token: str, type: str, id: str, extra: Optional[str] = None):
+    return await handle_catalog(request, type, id, token=token, extra=extra)
+
+# --- Meta ---
+async def handle_meta(request: Request, type: str, id: str, token: Optional[str] = None):
     base_url = get_base_url(request)
     id_clean = id.replace(".json", "")
 
@@ -183,9 +283,8 @@ async def stremio_meta(request: Request, type: str, id: str):
         ch = LIVE_CHANNELS.get(ch_code)
         if not ch:
             raise HTTPException(status_code=404, detail="Kanál nenalezen")
-        logo_url = ch["logo"]
-        if logo_url.startswith("/"):
-            logo_url = f"{base_url}{logo_url}"
+        logo_rel = ch.get("logo_png") or ch["logo"]
+        logo_url = f"{base_url}{logo_rel}"
         meta = {
             "id": id_clean,
             "type": "tv",
@@ -202,56 +301,84 @@ async def stremio_meta(request: Request, type: str, id: str):
         show_id = id_clean.replace("ct_show_", "")
         show = crud.get_show_by_id(show_id)
         if not show:
-            raise HTTPException(status_code=404, detail="Pořad nenalezen")
+            # Pokus o on-demand scrape z ČT
+            show = await ct_service.scrape_show_metadata(show_id)
+            if not show:
+                raise HTTPException(status_code=404, detail="Pořad nenalezen")
 
         episodes = crud.get_episodes_by_show(show_id)
-        img = show.get("image_url") or f"{base_url}/static/logos/ct1.svg"
-        genres_list = [g.strip() for g in show.get("genre", "").split(",") if g.strip()]
+        # Filtrujeme pouze přehratelné epizody
+        playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
 
-        videos = []
-        for ep in episodes:
-            videos.append({
-                "id": f"ct_ep_{ep['idec']}",
-                "title": ep.get("title") or show["title"],
-                "season": ep.get("season", 1),
-                "episode": ep.get("episode_num", 1),
-                "overview": ep.get("description", show.get("description", "")),
-                "thumbnail": ep.get("image_url") or img
-            })
+        poster_raw = show.get("poster_url") or show.get("image_url")
+        backdrop_raw = show.get("backdrop_url") or poster_raw
+        poster_url = image_proxy.build_proxy_url(base_url, poster_raw)
+        backdrop_url = image_proxy.build_proxy_url(base_url, backdrop_raw)
+
+        genres_list = [g.strip() for g in show.get("genre", "").split(",") if g.strip()]
+        is_movie = (show.get("show_type") == "movie")
 
         meta = {
             "id": id_clean,
-            "type": type,
+            "type": "movie" if is_movie else "series",
             "name": show["title"],
-            "poster": img,
-            "background": img,
+            "poster": poster_url,
+            "background": backdrop_url,
             "description": show.get("description", ""),
             "releaseInfo": str(show.get("year") or ""),
-            "genres": genres_list or ["iVysílání"],
-            "videos": videos
+            "genres": genres_list or ["iVysílání"]
         }
+
+        if is_movie:
+            if playable_episodes:
+                meta["behaviorHints"] = {
+                    "defaultVideoId": f"ct_ep_{playable_episodes[0]['idec']}"
+                }
+        else:
+            videos = []
+            for ep in playable_episodes:
+                ep_thumb = image_proxy.build_proxy_url(
+                    base_url,
+                    ep.get("image_url") or poster_raw
+                )
+                videos.append({
+                    "id": f"ct_ep_{ep['idec']}",
+                    "title": ep.get("title") or show["title"],
+                    "season": ep.get("season", 1),
+                    "episode": ep.get("episode_num", 1),
+                    "overview": ep.get("description", show.get("description", "")),
+                    "thumbnail": ep_thumb,
+                    "released": ep.get("air_date") or ""
+                })
+            meta["videos"] = videos
+
         return cors_response({"meta": meta})
 
     raise HTTPException(status_code=404, detail="Položka nenalezena")
 
-@router.get("/stream/{type}/{id}.json")
-async def stremio_stream(request: Request, type: str, id: str):
+@router.get("/meta/{type}/{id}.json")
+async def stremio_meta_default(request: Request, type: str, id: str):
+    return await handle_meta(request, type, id, token=None)
+
+@router.get("/{token}/meta/{type}/{id}.json")
+async def stremio_meta_token(request: Request, token: str, type: str, id: str):
+    return await handle_meta(request, type, id, token=token)
+
+# --- Stream ---
+async def handle_stream(request: Request, type: str, id: str, token: Optional[str] = None):
     base_url = get_base_url(request)
     id_clean = id.replace(".json", "")
 
-    # Získání uživatele pro streamovací URL (použijeme admin nebo prvního uživatele)
-    user = crud.get_user_by_username("admin")
-    u_name = user["username"] if user else "admin"
-    # Xtream codes heslo
-    u_pass = settings.DEFAULT_ADMIN_PASSWORD
+    # Získání uživatele pro streamovací URL přes user_token
+    user = get_user_for_token(token)
+    u_name = user["username"]
+    u_pass = user.get("user_token") or settings.DEFAULT_ADMIN_PASSWORD
 
     streams = []
 
     # 1. Živý stream
     if id_clean.startswith("ct_live_"):
         ch_code = id_clean.replace("ct_live_", "")
-        # Mapování kódu na číslo streamu
-        from app.api.xtream import CHANNEL_ID_TO_STREAM_ID
         s_id = CHANNEL_ID_TO_STREAM_ID.get(ch_code, 1)
         ch = LIVE_CHANNELS.get(ch_code, {})
         stream_url = f"{base_url}/live/{u_name}/{u_pass}/{s_id}.m3u8"
@@ -266,25 +393,71 @@ async def stremio_stream(request: Request, type: str, id: str):
     if id_clean.startswith("ct_ep_"):
         idec = id_clean.replace("ct_ep_", "")
         stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
-        streams.append({
+        
+        # Zjištění titulků
+        subs = []
+        try:
+            vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+            if vod_info and vod_info.get("subtitles"):
+                for s in vod_info["subtitles"]:
+                    subs.append({
+                        "id": s.get("lang", "cs"),
+                        "url": s.get("url"),
+                        "lang": "ces" if s.get("lang") in ["cs", "ces", "cze"] else s.get("lang", "ces")
+                    })
+        except Exception:
+            pass
+
+        stream_obj = {
             "name": "iVysílání Server",
             "title": "ČT iVysílání (1080p HLS)",
             "url": stream_url
-        })
+        }
+        if subs:
+            stream_obj["subtitles"] = subs
+
+        streams.append(stream_obj)
         return cors_response({"streams": streams})
 
-    # 3. Pořad přímo (pokud přehrávač předal id pořadu)
+    # 3. Pořad přímo (např. film)
     if id_clean.startswith("ct_show_"):
         show_id = id_clean.replace("ct_show_", "")
         episodes = crud.get_episodes_by_show(show_id)
-        if episodes:
-            idec = episodes[0]["idec"]
+        playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
+        if playable_episodes:
+            idec = playable_episodes[0]["idec"]
             stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
-            streams.append({
+            
+            subs = []
+            try:
+                vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+                if vod_info and vod_info.get("subtitles"):
+                    for s in vod_info["subtitles"]:
+                        subs.append({
+                            "id": s.get("lang", "cs"),
+                            "url": s.get("url"),
+                            "lang": "ces" if s.get("lang") in ["cs", "ces", "cze"] else s.get("lang", "ces")
+                        })
+            except Exception:
+                pass
+
+            stream_obj = {
                 "name": "iVysílání Server",
-                "title": f"Epizoda 1 (1080p HLS)",
+                "title": f"{playable_episodes[0].get('title', 'Film')} (1080p HLS)",
                 "url": stream_url
-            })
+            }
+            if subs:
+                stream_obj["subtitles"] = subs
+
+            streams.append(stream_obj)
             return cors_response({"streams": streams})
 
     return cors_response({"streams": []})
+
+@router.get("/stream/{type}/{id}.json")
+async def stremio_stream_default(request: Request, type: str, id: str):
+    return await handle_stream(request, type, id, token=None)
+
+@router.get("/{token}/stream/{type}/{id}.json")
+async def stremio_stream_token(request: Request, token: str, type: str, id: str):
+    return await handle_stream(request, type, id, token=token)

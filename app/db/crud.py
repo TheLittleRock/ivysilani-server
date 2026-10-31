@@ -1,4 +1,5 @@
 import time
+import secrets
 from typing import List, Optional, Dict, Any
 from app.db.database import get_db
 from app.core.security import get_password_hash, verify_password
@@ -12,6 +13,15 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
+def get_user_by_token(token: str) -> Optional[Dict[str, Any]]:
+    if not token:
+        return None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE user_token = ? AND is_active = 1", (token,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
 def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
@@ -22,7 +32,7 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
 def list_users() -> List[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username, is_admin, is_active, exp_date, max_connections, created_at, last_active FROM users ORDER BY id ASC")
+        cursor.execute("SELECT id, username, user_token, is_admin, is_active, exp_date, max_connections, created_at, last_active FROM users ORDER BY id ASC")
         return [dict(r) for r in cursor.fetchall()]
 
 def create_user(username: str, password: str, is_admin: bool = False, exp_date: Optional[int] = None, max_connections: int = 2) -> Optional[int]:
@@ -33,10 +43,11 @@ def create_user(username: str, password: str, is_admin: bool = False, exp_date: 
             return None
         now = int(time.time())
         pwd_hash = get_password_hash(password)
+        token = secrets.token_hex(16)
         cursor.execute("""
-        INSERT INTO users (username, password_hash, is_admin, is_active, exp_date, max_connections, created_at, last_active)
-        VALUES (?, ?, ?, 1, ?, ?, ?, ?)
-        """, (username, pwd_hash, 1 if is_admin else 0, exp_date, max_connections, now, now))
+        INSERT INTO users (username, password_hash, user_token, is_admin, is_active, exp_date, max_connections, created_at, last_active)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+        """, (username, pwd_hash, token, 1 if is_admin else 0, exp_date, max_connections, now, now))
         return cursor.lastrowid
 
 def update_user(user_id: int, password: Optional[str] = None, is_admin: Optional[bool] = None, is_active: Optional[bool] = None, exp_date: Optional[int] = None, max_connections: Optional[int] = None) -> bool:
@@ -68,7 +79,6 @@ def update_user(user_id: int, password: Optional[str] = None, is_admin: Optional
 def delete_user(user_id: int) -> bool:
     with get_db() as conn:
         cursor = conn.cursor()
-        # Zákaz smazání posledního administrátora
         cursor.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if not row:
@@ -95,32 +105,71 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     exp_date = user.get("exp_date")
     if exp_date and exp_date < int(time.time()):
         return None
-    if not verify_password(password, user["password_hash"]):
+    # Umožníme ověření buď klasickým heslem, nebo neměnným uživatelským tokenem
+    is_valid_pwd = verify_password(password, user["password_hash"])
+    is_valid_token = bool(user.get("user_token") and password == user["user_token"])
+    if not (is_valid_pwd or is_valid_token):
         return None
     update_user_activity(username)
     return user
 
 # --- Správa pořadů a epizod (VOD Katalog) ---
 
-def upsert_show(show_id: str, title: str, slug: str = "", description: str = "", image_url: str = "", genre: str = "", year: str = "", total_episodes: int = 0):
+def upsert_show(
+    show_id: str,
+    title: str,
+    slug: str = "",
+    description: str = "",
+    image_url: str = "",
+    poster_url: str = "",
+    backdrop_url: str = "",
+    logo_url: str = "",
+    genre: str = "",
+    year: str = "",
+    show_type: str = "series",
+    is_playable: bool = True,
+    total_episodes: int = 0
+):
     with get_db() as conn:
         cursor = conn.cursor()
         now = int(time.time())
         cursor.execute("""
-        INSERT INTO shows (id, title, slug, description, image_url, genre, year, total_episodes, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO shows (id, title, slug, description, image_url, poster_url, backdrop_url, logo_url, genre, year, show_type, is_playable, total_episodes, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title,
             slug=excluded.slug,
             description=excluded.description,
             image_url=excluded.image_url,
+            poster_url=excluded.poster_url,
+            backdrop_url=excluded.backdrop_url,
+            logo_url=excluded.logo_url,
             genre=excluded.genre,
             year=excluded.year,
+            show_type=excluded.show_type,
+            is_playable=excluded.is_playable,
             total_episodes=excluded.total_episodes,
             updated_at=excluded.updated_at
-        """, (show_id, title, slug, description, image_url, genre, year, total_episodes, now))
+        """, (
+            show_id, title, slug, description, image_url,
+            poster_url or image_url, backdrop_url or image_url, logo_url,
+            genre, year, show_type, 1 if is_playable else 0, total_episodes, now
+        ))
 
-def upsert_episode(ep_id: str, show_id: str, idec: str, title: str, description: str = "", image_url: str = "", duration: int = 0, season: int = 1, episode_num: int = 1, broadcast_date: str = "", is_playable: bool = True, is_drm: bool = False):
+def upsert_episode(
+    ep_id: str,
+    show_id: str,
+    idec: str,
+    title: str,
+    description: str = "",
+    image_url: str = "",
+    duration: int = 0,
+    season: int = 1,
+    episode_num: int = 1,
+    broadcast_date: str = "",
+    is_playable: bool = True,
+    is_drm: bool = False
+):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -140,15 +189,32 @@ def upsert_episode(ep_id: str, show_id: str, idec: str, title: str, description:
             is_drm=excluded.is_drm
         """, (ep_id, show_id, idec, title, description, image_url, duration, season, episode_num, broadcast_date, 1 if is_playable else 0, 1 if is_drm else 0))
 
-def list_shows(genre: Optional[str] = None, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def mark_show_playable(show_id: str, is_playable: bool):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE shows SET is_playable = ? WHERE id = ?", (1 if is_playable else 0, show_id))
+
+def list_shows(
+    genre: Optional[str] = None,
+    show_type: Optional[str] = None,
+    only_playable: bool = False,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
         query = "SELECT * FROM shows"
         params = []
         conditions = []
         if genre and genre != "all":
-            conditions.append("genre = ?")
-            params.append(genre)
+            conditions.append("genre LIKE ?")
+            params.append(f"%{genre}%")
+        if show_type:
+            conditions.append("show_type = ?")
+            params.append(show_type)
+        if only_playable:
+            conditions.append("is_playable = 1")
         if search:
             conditions.append("(title LIKE ? OR description LIKE ?)")
             params.append(f"%{search}%")
@@ -160,15 +226,31 @@ def list_shows(genre: Optional[str] = None, search: Optional[str] = None, limit:
         cursor.execute(query, params)
         return [dict(r) for r in cursor.fetchall()]
 
-def count_shows(genre: Optional[str] = None, search: Optional[str] = None) -> int:
+def list_series(genre: Optional[str] = None, only_playable: bool = True, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    return list_shows(genre=genre, show_type="series", only_playable=only_playable, search=search, limit=limit, offset=offset)
+
+def list_movies(genre: Optional[str] = None, only_playable: bool = True, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    return list_shows(genre=genre, show_type="movie", only_playable=only_playable, search=search, limit=limit, offset=offset)
+
+def count_shows(
+    genre: Optional[str] = None,
+    show_type: Optional[str] = None,
+    only_playable: bool = False,
+    search: Optional[str] = None
+) -> int:
     with get_db() as conn:
         cursor = conn.cursor()
         query = "SELECT COUNT(*) as cnt FROM shows"
         params = []
         conditions = []
         if genre and genre != "all":
-            conditions.append("genre = ?")
-            params.append(genre)
+            conditions.append("genre LIKE ?")
+            params.append(f"%{genre}%")
+        if show_type:
+            conditions.append("show_type = ?")
+            params.append(show_type)
+        if only_playable:
+            conditions.append("is_playable = 1")
         if search:
             conditions.append("(title LIKE ? OR description LIKE ?)")
             params.append(f"%{search}%")
@@ -185,10 +267,13 @@ def get_show_by_id(show_id: str) -> Optional[Dict[str, Any]]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def get_episodes_by_show(show_id: str) -> List[Dict[str, Any]]:
+def get_episodes_by_show(show_id: str, only_playable: bool = False) -> List[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM episodes WHERE show_id = ? ORDER BY season ASC, episode_num ASC", (show_id,))
+        if only_playable:
+            cursor.execute("SELECT * FROM episodes WHERE show_id = ? AND is_playable = 1 ORDER BY season ASC, episode_num ASC", (show_id,))
+        else:
+            cursor.execute("SELECT * FROM episodes WHERE show_id = ? ORDER BY season ASC, episode_num ASC", (show_id,))
         return [dict(r) for r in cursor.fetchall()]
 
 def get_episode_by_idec(idec: str) -> Optional[Dict[str, Any]]:
@@ -202,7 +287,14 @@ def list_genres() -> List[str]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT genre FROM shows WHERE genre IS NOT NULL AND genre != '' ORDER BY genre ASC")
-        return [r["genre"] for r in cursor.fetchall()]
+        raw_genres = [r["genre"] for r in cursor.fetchall()]
+        genres_set = set()
+        for rg in raw_genres:
+            for part in rg.split(","):
+                p = part.strip()
+                if p:
+                    genres_set.add(p)
+        return sorted(list(genres_set))
 
 # --- Správa stahování ---
 
@@ -220,41 +312,6 @@ def create_download_task(task_id: str, idec: str, title: str) -> Dict[str, Any]:
             "created_at": now, "updated_at": now
         }
 
-def update_download_task(task_id: str, status: Optional[str] = None, progress: Optional[float] = None, speed: Optional[str] = None, eta: Optional[str] = None, filepath: Optional[str] = None, filesize: Optional[int] = None, error_message: Optional[str] = None):
-    with get_db() as conn:
-        cursor = conn.cursor()
-        updates = ["updated_at = ?"]
-        params = [int(time.time())]
-        if status:
-            updates.append("status = ?")
-            params.append(status)
-        if progress is not None:
-            updates.append("progress = ?")
-            params.append(progress)
-        if speed is not None:
-            updates.append("speed = ?")
-            params.append(speed)
-        if eta is not None:
-            updates.append("eta = ?")
-            params.append(eta)
-        if filepath is not None:
-            updates.append("filepath = ?")
-            params.append(filepath)
-        if filesize is not None:
-            updates.append("filesize = ?")
-            params.append(filesize)
-        if error_message is not None:
-            updates.append("error_message = ?")
-            params.append(error_message)
-        params.append(task_id)
-        cursor.execute(f"UPDATE downloads SET {', '.join(updates)} WHERE id = ?", params)
-
-def list_download_tasks() -> List[Dict[str, Any]]:
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM downloads ORDER BY created_at DESC")
-        return [dict(r) for r in cursor.fetchall()]
-
 def get_download_task(task_id: str) -> Optional[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
@@ -262,7 +319,24 @@ def get_download_task(task_id: str) -> Optional[Dict[str, Any]]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def delete_download_task(task_id: str):
+def list_download_tasks() -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM downloads ORDER BY created_at DESC")
+        return [dict(r) for r in cursor.fetchall()]
+
+def update_download_task(task_id: str, **kwargs) -> bool:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        kwargs["updated_at"] = int(time.time())
+        fields = [f"{k} = ?" for k in kwargs.keys()]
+        params = list(kwargs.values())
+        params.append(task_id)
+        cursor.execute(f"UPDATE downloads SET {', '.join(fields)} WHERE id = ?", params)
+        return cursor.rowcount > 0
+
+def delete_download_task(task_id: str) -> bool:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM downloads WHERE id = ?", (task_id,))
+        return cursor.rowcount > 0

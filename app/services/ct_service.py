@@ -1,8 +1,8 @@
-import re
 import time
+import re
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional, Any
 import httpx
 from bs4 import BeautifulSoup
 
@@ -10,158 +10,172 @@ from app.core.config import settings
 
 logger = logging.getLogger("ct_service")
 
-# Definice 14 živých kanálů ČT
+# 14 oficiálních stanic České televize
 LIVE_CHANNELS = {
     "CH_1": {
-        "id": "CH_1",
-        "name": "ČT1",
-        "num": 1,
-        "category": "Česká televize",
+        "id": "CH_1", "channel_code": "1", "name": "ČT1", "num": 1,
+        "category": "Česká televize", "epg_id": "ct1.cz",
         "logo": "/static/logos/ct1.svg",
-        "epg_id": "ct1.cz",
+        "logo_png": "/static/logos/ct1.png",
         "description": "Hlavní program České televize – rodinná televize, seriály, zábava, zprávy."
     },
     "CH_2": {
-        "id": "CH_2",
-        "name": "ČT2",
-        "num": 2,
-        "category": "Česká televize",
+        "id": "CH_2", "channel_code": "2", "name": "ČT2", "num": 2,
+        "category": "Česká televize", "epg_id": "ct2.cz",
         "logo": "/static/logos/ct2.svg",
-        "epg_id": "ct2.cz",
+        "logo_png": "/static/logos/ct2.png",
         "description": "Dokumenty, příroda, historie, kvalitní filmová tvorba a publicistika."
     },
     "CH_24": {
-        "id": "CH_24",
-        "name": "ČT24",
-        "num": 3,
-        "category": "Česká televize",
+        "id": "CH_24", "channel_code": "24", "name": "ČT24", "num": 3,
+        "category": "Česká televize", "epg_id": "ct24.cz",
         "logo": "/static/logos/ct24.svg",
-        "epg_id": "ct24.cz",
+        "logo_png": "/static/logos/ct24.png",
         "description": "Nepřetržité 24hodinové zpravodajství a aktuální publicistika."
     },
     "CH_4": {
-        "id": "CH_4",
-        "name": "ČT sport",
-        "num": 4,
-        "category": "Česká televize",
+        "id": "CH_4", "channel_code": "4", "name": "ČT sport", "num": 4,
+        "category": "Česká televize", "epg_id": "ctsport.cz",
         "logo": "/static/logos/ctsport.svg",
-        "epg_id": "ctsport.cz",
+        "logo_png": "/static/logos/ctsport.png",
         "description": "Český a mezinárodní sport, přímé přenosy a sportovní magazíny."
     },
     "CH_5": {
-        "id": "CH_5",
-        "name": "ČT :D",
-        "num": 5,
-        "category": "Česká televize",
+        "id": "CH_5", "channel_code": "5", "name": "ČT :D", "num": 5,
+        "category": "Česká televize", "epg_id": "ctd.cz",
         "logo": "/static/logos/ctd.svg",
-        "epg_id": "ctd.cz",
+        "logo_png": "/static/logos/ctd.png",
         "description": "Dětský kanál Déčko pro děti od 4 do 12 let. Pohádky, vzdělávání a animované filmy."
     },
     "CH_6": {
-        "id": "CH_6",
-        "name": "ČT art",
-        "num": 6,
-        "category": "Česká televize",
+        "id": "CH_6", "channel_code": "6", "name": "ČT art", "num": 6,
+        "category": "Česká televize", "epg_id": "ctart.cz",
         "logo": "/static/logos/ctart.svg",
-        "epg_id": "ctart.cz",
+        "logo_png": "/static/logos/ctart.png",
         "description": "Kulturní a umělecký kanál ČT – divadlo, hudba, výtvarné umění a filmy."
     },
     "CH_25": {
-        "id": "CH_25",
-        "name": "ČT sport Plus 1",
-        "num": 25,
-        "category": "ČT sport Plus",
+        "id": "CH_25", "channel_code": "25", "name": "ČT sport Plus 1", "num": 7,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus1.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus1.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 1."
     },
     "CH_26": {
-        "id": "CH_26",
-        "name": "ČT sport Plus 2",
-        "num": 26,
-        "category": "ČT sport Plus",
+        "id": "CH_26", "channel_code": "26", "name": "ČT sport Plus 2", "num": 8,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus2.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus2.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 2."
     },
     "CH_27": {
-        "id": "CH_27",
-        "name": "ČT sport Plus 3",
-        "num": 27,
-        "category": "ČT sport Plus",
+        "id": "CH_27", "channel_code": "27", "name": "ČT sport Plus 3", "num": 9,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus3.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus3.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 3."
     },
     "CH_28": {
-        "id": "CH_28",
-        "name": "ČT sport Plus 4",
-        "num": 28,
-        "category": "ČT sport Plus",
+        "id": "CH_28", "channel_code": "28", "name": "ČT sport Plus 4", "num": 10,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus4.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus4.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 4."
     },
     "CH_29": {
-        "id": "CH_29",
-        "name": "ČT sport Plus 5",
-        "num": 29,
-        "category": "ČT sport Plus",
+        "id": "CH_29", "channel_code": "29", "name": "ČT sport Plus 5", "num": 11,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus5.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus5.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 5."
     },
     "CH_30": {
-        "id": "CH_30",
-        "name": "ČT sport Plus 6",
-        "num": 30,
-        "category": "ČT sport Plus",
+        "id": "CH_30", "channel_code": "30", "name": "ČT sport Plus 6", "num": 12,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus6.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus6.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 6."
     },
     "CH_31": {
-        "id": "CH_31",
-        "name": "ČT sport Plus 7",
-        "num": 31,
-        "category": "ČT sport Plus",
+        "id": "CH_31", "channel_code": "31", "name": "ČT sport Plus 7", "num": 13,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus7.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus7.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 7."
     },
     "CH_32": {
-        "id": "CH_32",
-        "name": "ČT sport Plus 8",
-        "num": 32,
-        "category": "ČT sport Plus",
+        "id": "CH_32", "channel_code": "32", "name": "ČT sport Plus 8", "num": 14,
+        "category": "ČT sport Plus", "epg_id": "ctsportplus8.cz",
         "logo": "/static/logos/ctsportplus.svg",
-        "epg_id": "ctsportplus8.cz",
+        "logo_png": "/static/logos/ctsportplus.png",
         "description": "Internetový sportovní přenos ČT sport Plus 8."
     }
 }
 
+def parse_season_number(title: str, default: int = 1) -> int:
+    """Extrahuje číslo řady z popisku např. 'I. řada', '2. série', 'XIII. řada'."""
+    if not title:
+        return default
+    m_num = re.search(r"\b(\d+)\b", title)
+    if m_num:
+        return int(m_num.group(1))
+    m_roman = re.search(r"\b([IVXLC]+)\b", title.upper())
+    if m_roman:
+        roman_map = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
+        clean = m_roman.group(1)
+        total, prev = 0, 0
+        for c in reversed(clean):
+            val = roman_map.get(c, 0)
+            if val < prev:
+                total -= val
+            else:
+                total += val
+                prev = val
+        return max(1, total)
+    return default
+
+def parse_episode_number(title: str, default: int = 1) -> int:
+    """Extrahuje číslo dílu z názvu např. '1/26 Od začátku', 'Díl 5' apod."""
+    if not title:
+        return default
+    m_slash = re.search(r"^(\d+)\s*/\s*\d+", title)
+    if m_slash:
+        return int(m_slash.group(1))
+    m_num = re.search(r"\b(?:díl|epizoda|část)?\s*(\d+)\b", title, re.IGNORECASE)
+    if m_num:
+        return int(m_num.group(1))
+    return default
+
 class CTService:
     def __init__(self):
-        self._cache = {}
         self._headers = {
             "User-Agent": settings.USER_AGENT,
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "cs,en;q=0.9",
-            "Referer": "https://www.ceskatelevize.cz/"
+            "Origin": "https://www.ceskatelevize.cz",
+            "Referer": "https://www.ceskatelevize.cz/",
+            "Accept": "application/json, text/plain, */*"
         }
+        self._cache = {}
 
-    def get_channels_list(self) -> List[Dict[str, Any]]:
-        return list(LIVE_CHANNELS.values())
+    def _extract_subtitles(self, raw_subs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Normalizuje seznam titulků a extrahuje přímý WebVTT odkaz."""
+        subtitles = []
+        if not raw_subs:
+            return subtitles
+        for s in raw_subs:
+            files = s.get("files", [])
+            vtt_file = next((f["url"] for f in files if f.get("format") == "vtt"), None)
+            if not vtt_file and files:
+                vtt_file = files[0].get("url")
+            if vtt_file:
+                subtitles.append({
+                    "language": s.get("language", "ces"),
+                    "label": "Čeština" if s.get("language") in ["ces", "cze", "cs"] else s.get("language"),
+                    "url": vtt_file
+                })
+        return subtitles
 
-    def get_channel(self, channel_id: str) -> Optional[Dict[str, Any]]:
-        return LIVE_CHANNELS.get(channel_id.upper())
-
-    async def resolve_live_stream(self, channel_id: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
-        """Získá přímou stream URL pro živé vysílání (DASH s Widevine DRM a HLS)."""
-        ch_key = channel_id.upper()
-        if ch_key not in LIVE_CHANNELS:
-            return None
-
+    async def resolve_live_stream(self, ch_key: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
+        """Získá aktuální manifest živého vysílání (DASH Widevine s fallbackem na HLS)."""
         cached = self._cache.get(f"live_{ch_key}")
         if cached and cached["expiry"] > time.time():
             return cached["data"]
@@ -171,7 +185,6 @@ class CTService:
 
         try:
             async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
-                # Paralelní nebo sekvenční dotaz na HLS a DASH
                 hls_resp = await client.get(hls_url)
                 dash_resp = await client.get(dash_url)
 
@@ -191,7 +204,7 @@ class CTService:
 
                 result = {
                     "channel_id": ch_key,
-                    "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS[ch_key]["name"],
+                    "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS.get(ch_key, {}).get("name", "ČT"),
                     "url": dash_main if (allow_drm and dash_main) else (hls_main or dash_main),
                     "hls_url": hls_main,
                     "dash_url": dash_main,
@@ -199,11 +212,12 @@ class CTService:
                     "is_drm": is_drm,
                     "manifest_type": "mpd" if (allow_drm and dash_main) else "hls",
                     "qualities": dash_data.get("availableQualities") or hls_data.get("availableQualities", []),
-                    "audio_tracks": dash_data.get("audioTracks") or hls_data.get("audioTracks", [])
+                    "audio_tracks": dash_data.get("audioTracks") or hls_data.get("audioTracks", []),
+                    "subtitles": self._extract_subtitles(dash_data.get("subtitles") or hls_data.get("subtitles", []))
                 }
                 self._cache[f"live_{ch_key}"] = {
                     "data": result,
-                    "expiry": time.time() + 1800  # 30 minut
+                    "expiry": time.time() + 1800
                 }
                 return result
         except Exception as e:
@@ -249,24 +263,38 @@ class CTService:
                 if r.status_code == 200:
                     data = r.json()
                     items = data.get("data", {}).get("liveBroadcastFind", [])
-                    for it in items:
-                        ch_id = it.get("id")
-                        if ch_id:
-                            result[ch_id] = {
-                                "current": it.get("current") or {},
-                                "next": it.get("next") or {}
+                    slug_map = {
+                        "ct1": "CH_1",
+                        "ct2": "CH_2",
+                        "ct24": "CH_24",
+                        "ct-sport": "CH_4",
+                        "ct-d": "CH_5",
+                        "ct-art": "CH_6",
+                        "ct-sport-plus-1": "CH_25",
+                        "ct-sport-plus-2": "CH_26",
+                        "ct-sport-plus-3": "CH_27",
+                        "ct-sport-plus-4": "CH_28",
+                        "ct-sport-plus-5": "CH_29",
+                        "ct-sport-plus-6": "CH_30",
+                        "ct-sport-plus-7": "CH_31",
+                        "ct-sport-plus-8": "CH_32"
+                    }
+                    for item in items:
+                        slug = item.get("slug")
+                        ch_key = slug_map.get(slug)
+                        if ch_key:
+                            result[ch_key] = {
+                                "current": item.get("current"),
+                                "next": item.get("next")
                             }
+                    self._cache["live_epg_now"] = {"data": result, "expiry": time.time() + 60}
         except Exception as e:
-            logger.warning(f"Error fetching live EPG from ČT: {e}")
+            logger.warning(f"Error fetching live EPG: {e}")
 
-        self._cache["live_epg_now"] = {
-            "data": result,
-            "expiry": time.time() + 60  # Cache 1 minutu
-        }
         return result
 
     async def resolve_vod_stream(self, idec: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
-        """Získá stream pro daný IDEC pořadu. Nejprve zkusí HLS bez DRM."""
+        """Získá streamovací URL pro daný IDEC kód (pořad nebo epizodu)."""
         cached = self._cache.get(f"vod_{idec}")
         if cached and cached["expiry"] > time.time():
             return cached["data"]
@@ -280,13 +308,15 @@ class CTService:
                     data = resp.json()
                     streams = data.get("streams", [])
                     if streams and "url" in streams[0]:
+                        raw_subs = streams[0].get("subtitles", []) or data.get("subtitles", [])
                         result = {
                             "idec": idec,
                             "title": data.get("title", ""),
                             "url": streams[0]["url"],
                             "is_drm": False,
                             "manifest_type": "hls",
-                            "subtitles": streams[0].get("subtitles", [])
+                            "subtitles": self._extract_subtitles(raw_subs),
+                            "raw_subtitles": raw_subs
                         }
                         self._cache[f"vod_{idec}"] = {"data": result, "expiry": time.time() + 1800}
                         return result
@@ -306,6 +336,7 @@ class CTService:
                     streams = data.get("streams", [])
                     if streams and "url" in streams[0]:
                         raw_dash_url = streams[0]["url"]
+                        raw_subs = streams[0].get("subtitles", []) or data.get("subtitles", [])
                         result = {
                             "idec": idec,
                             "title": data.get("title", ""),
@@ -313,7 +344,8 @@ class CTService:
                             "is_drm": True,
                             "manifest_type": "mpd",
                             "license_key": "https://ivys-wvproxy.o2tv.cz/license?access_token=public|Origin=https%3A%2F%2Fwww.ceskatelevize.cz&Referer=https%3A%2F%2Fwww.ceskatelevize.cz%2F|R{SSM}|",
-                            "subtitles": streams[0].get("subtitles", [])
+                            "subtitles": self._extract_subtitles(raw_subs),
+                            "raw_subtitles": raw_subs
                         }
                         self._cache[f"vod_{idec}"] = {"data": result, "expiry": time.time() + 1800}
                         return result
@@ -322,9 +354,101 @@ class CTService:
 
         return None
 
+    async def get_episodes_for_programme(
+        self,
+        programme_id: str,
+        season_id: Optional[str] = None,
+        only_playable: bool = False,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Získá reálné epizody pro daný pořad z ČT GraphQL query GetEpisodes."""
+        url = "https://api.ceskatelevize.cz/graphql/"
+        params = {"client": "iVysilaniWeb", "version": "1.131.1", "use-new-playability": "true"}
+        query = """
+        query GetEpisodes($programmeId: String!, $seasonId: String, $limit: PaginationAmount!, $offset: Int!, $orderBy: EpisodeOrderByType!, $keyword: String, $onlyPlayable: Boolean) {
+          programme(programmeId: $programmeId) {
+            id
+            episodes(seasonId: $seasonId, limit: $limit, offset: $offset, orderBy: $orderBy, keyword: $keyword, onlyPlayable: $onlyPlayable) {
+              totalCount
+              items {
+                id
+                title
+                description
+                duration
+                season { id title }
+                cardLabels { topLeft center bottomRight }
+                images { card(width: 480, height: 270) }
+                playable
+              }
+            }
+          }
+        }
+        """
+        variables = {
+            "programmeId": programme_id,
+            "seasonId": season_id,
+            "limit": limit,
+            "offset": offset,
+            "orderBy": "oldest",
+            "onlyPlayable": only_playable
+        }
+        try:
+            async with httpx.AsyncClient(headers=self._headers, timeout=12.0) as client:
+                r = await client.post(url, params=params, json={"query": query, "variables": variables})
+                if r.status_code == 200:
+                    data = r.json()
+                    episodes_obj = data.get("data", {}).get("programme", {}).get("episodes", {})
+                    items = episodes_obj.get("items", [])
+                    return items
+        except Exception as e:
+            logger.warning(f"Error fetching GraphQL episodes for programme {programme_id}: {e}")
+        return []
+
+    async def search_shows_graphql(self, keyword: str, limit: int = 30, only_playable: bool = False) -> List[Dict[str, Any]]:
+        """Vyhledá pořady přímo v ČT GraphQL API přes SearchShows."""
+        if not keyword or len(keyword.strip()) < 2:
+            return []
+
+        url = "https://api.ceskatelevize.cz/graphql/"
+        params = {"client": "iVysilaniWeb", "version": "1.131.1", "use-new-playability": "true"}
+        query = """
+        query SearchShows($limit: PaginationAmount!, $offset: Int!, $search: String!, $onlyPlayable: Boolean) {
+          searchShows(limit: $limit, offset: $offset, keyword: $search, onlyPlayable: $onlyPlayable) {
+            totalCount
+            items {
+              code
+              id
+              description
+              genres { id title }
+              imageUrl(width: 480, height: 270)
+              sidp
+              title
+              playable
+              cardLabels { topLeft center }
+            }
+          }
+        }
+        """
+        variables = {
+            "limit": limit,
+            "offset": 0,
+            "search": keyword.strip(),
+            "onlyPlayable": only_playable
+        }
+        try:
+            async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
+                r = await client.post(url, params=params, json={"query": query, "variables": variables})
+                if r.status_code == 200:
+                    data = r.json()
+                    items = data.get("data", {}).get("searchShows", {}).get("items", [])
+                    return items
+        except Exception as e:
+            logger.warning(f"GraphQL SearchShows failed: {e}")
+        return []
+
     async def scrape_show_metadata(self, slug_or_id_or_url: str) -> Optional[Dict[str, Any]]:
-        """Stáhne a zparsuje informace o pořadu a jeho epizodách z webu ČT."""
-        # Extrakce slug / showId
+        """Stáhne a zparsuje kompletní informace o pořadu, všech sériích a všech dílech z webu ČT."""
         clean_input = slug_or_id_or_url.strip()
         m = re.search(r"/porady/([0-9a-zA-Z_\-]+)/?", clean_input)
         slug = m.group(1) if m else clean_input.strip("/")
@@ -334,8 +458,16 @@ class CTService:
             async with httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT}, follow_redirects=True, timeout=12.0) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
-                    logger.warning(f"Failed to fetch show page {url}: {resp.status_code}")
-                    return None
+                    # Zkusíme vyhledat přes GraphQL, pokud slug nefungoval přímo
+                    search_res = await self.search_shows_graphql(slug, limit=1)
+                    if search_res:
+                        item = search_res[0]
+                        full_slug = f"{item['id']}-{item['code']}"
+                        url = f"https://www.ceskatelevize.cz/porady/{full_slug}/"
+                        resp = await client.get(url)
+                    if resp.status_code != 200:
+                        logger.warning(f"Failed to fetch show page {url}: {resp.status_code}")
+                        return None
 
                 match = re.search(r'<script id="__NEXT_DATA__" type="application/json">([^<]+)</script>', resp.text)
                 if not match:
@@ -345,7 +477,6 @@ class CTService:
                 page_data = data.get("props", {}).get("pageProps", {}).get("data", {})
                 prog = page_data.get("programme")
                 if not prog:
-                    # Může to být přímo stránka epizody
                     ep_data = page_data.get("episode")
                     if ep_data:
                         show_info = ep_data.get("show", {})
@@ -361,104 +492,126 @@ class CTService:
                         return None
 
                 show_id = str(prog.get("id") or slug)
+                programme_id = str(prog.get("programmeId") or show_id)
                 title = prog.get("title", "")
                 description = prog.get("description") or prog.get("shortDescription") or ""
-                
-                # Zpracování obrázku
-                images = prog.get("images", {})
-                image_url = ""
-                if isinstance(images, dict):
-                    image_url = images.get("card") or images.get("hero", {}).get("desktop") or ""
-                if not image_url and "previewImage" in prog:
-                    image_url = prog["previewImage"]
-
-                # Žánr a rok
-                genres = [g["title"] for g in prog.get("flatGenres", []) if isinstance(g, dict) and "title" in g]
-                genre = genres[0] if genres else "Archiv"
                 year = str(prog.get("year") or "")
 
-                # Epizody
+                raw_type = prog.get("showType", "")
+                seasons_list = prog.get("seasons", [])
+                show_type = "movie" if raw_type == "movie" or (not seasons_list and prog.get("idec")) else "series"
+                is_playable = bool(prog.get("isPlayable", True))
+
+                # Extrahe obrázků různých typů
+                images = prog.get("images", {})
+                hero_imgs = images.get("heroWithFallback", {}) or {}
+                backdrop_url = (
+                    hero_imgs.get("desktop")
+                    or images.get("metaImage")
+                    or images.get("subpage")
+                    or images.get("card2x")
+                    or ""
+                )
+                placeholder_imgs = images.get("placeholderWithFallback", {}) or {}
+                poster_url = (
+                    images.get("poster")
+                    or images.get("poster2x")
+                    or placeholder_imgs.get("placeholderMobile")
+                    or images.get("card")
+                    or backdrop_url
+                )
+                logo_url = (
+                    images.get("logo")
+                    or images.get("logo2x")
+                    or images.get("logoInverted")
+                    or ""
+                )
+                image_url = images.get("card") or backdrop_url or poster_url
+
+                # Žánry
+                genres = [g["title"] for g in prog.get("flatGenres", []) if isinstance(g, dict) and "title" in g]
+                genre = ", ".join(genres) if genres else "Archiv"
+
                 episodes = []
-                # Nejnovější epizoda z actionButtonu
-                action_btn = prog.get("actionButton")
-                if action_btn and action_btn.get("idec"):
-                    episodes.append({
-                        "id": str(action_btn["idec"]),
-                        "idec": str(action_btn["idec"]),
-                        "title": action_btn.get("text") or "Přehrát pořad",
-                        "description": description,
-                        "image_url": image_url,
-                        "season": 1,
-                        "episode_num": 1
-                    })
-                elif prog.get("idec"):
-                    episodes.append({
-                        "id": str(prog["idec"]),
-                        "idec": str(prog["idec"]),
-                        "title": title,
-                        "description": description,
-                        "image_url": image_url,
-                        "season": 1,
-                        "episode_num": 1
-                    })
+
+                if show_type == "series":
+                    # Pro seriál načteme všechny reálné epizody přes GraphQL GetEpisodes
+                    # 1. Zkusíme načíst celou sérii bez season filtru (až 100 dílů)
+                    gql_episodes = await self.get_episodes_for_programme(programme_id, limit=50, offset=0)
+                    if len(gql_episodes) == 50:
+                        # Druhá stránka pro dlouhé seriály
+                        page2 = await self.get_episodes_for_programme(programme_id, limit=50, offset=50)
+                        gql_episodes.extend(page2)
+                        if len(page2) == 50:
+                            page3 = await self.get_episodes_for_programme(programme_id, limit=50, offset=100)
+                            gql_episodes.extend(page3)
+
+                    # Pokud bez season filtru nic nepřišlo a máme seasons_list, zkusíme jednotlivé řady
+                    if not gql_episodes and seasons_list:
+                        for s_item in seasons_list:
+                            s_id = s_item.get("id")
+                            if s_id:
+                                s_eps = await self.get_episodes_for_programme(programme_id, season_id=s_id, limit=50)
+                                gql_episodes.extend(s_eps)
+
+                    for idx, ep_item in enumerate(gql_episodes, start=1):
+                        ep_idec = str(ep_item.get("id") or "")
+                        ep_title = ep_item.get("title") or f"Epizoda {idx}"
+                        ep_season_title = (ep_item.get("season") or {}).get("title", "")
+                        season_num = parse_season_number(ep_season_title, default=1)
+                        ep_num = parse_episode_number(ep_title, default=idx)
+                        ep_imgs = ep_item.get("images") or {}
+                        ep_img = ep_imgs.get("card") or image_url
+
+                        episodes.append({
+                            "id": f"{show_id}_{ep_idec}",
+                            "idec": ep_idec,
+                            "title": ep_title,
+                            "description": ep_item.get("description") or description,
+                            "image_url": ep_img,
+                            "duration": ep_item.get("duration", 0),
+                            "season": season_num,
+                            "episode_num": ep_num,
+                            "is_playable": bool(ep_item.get("playable", True)),
+                            "is_drm": False
+                        })
+
+                # Fallback pro film nebo pokud seriál neměl dostupné epizody přes GraphQL
+                if not episodes:
+                    idec = str(prog.get("idec") or (prog.get("actionButton") or {}).get("idec") or "")
+                    if idec:
+                        episodes.append({
+                            "id": f"{show_id}_{idec}",
+                            "idec": idec,
+                            "title": title,
+                            "description": description,
+                            "image_url": image_url,
+                            "duration": prog.get("duration", 0),
+                            "season": 1,
+                            "episode_num": 1,
+                            "is_playable": is_playable,
+                            "is_drm": False
+                        })
 
                 return {
                     "id": show_id,
+                    "programme_id": programme_id,
                     "title": title,
                     "slug": slug,
                     "description": description,
                     "image_url": image_url,
+                    "poster_url": poster_url,
+                    "backdrop_url": backdrop_url,
+                    "logo_url": logo_url,
                     "genre": genre,
                     "year": year,
+                    "show_type": show_type,
+                    "is_playable": is_playable,
+                    "total_episodes": len(episodes),
                     "episodes": episodes
                 }
         except Exception as e:
             logger.error(f"Error scraping show {slug}: {e}")
             return None
-
-    async def search_shows_online(self, query: str) -> List[Dict[str, Any]]:
-        """Vyhledá pořady na iVysílání parsováním vyhledávací stránky."""
-        if not query or len(query.strip()) < 2:
-            return []
-
-        url = f"https://www.ceskatelevize.cz/ivysilani/hledani/?keyword={query.strip()}"
-        results = []
-        try:
-            async with httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT}, follow_redirects=True, timeout=10.0) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    return []
-
-                soup = BeautifulSoup(resp.text, "html.parser")
-                found_links = set()
-                for a in soup.find_all("a", href=re.compile(r"^/porady/")):
-                    href = a.get("href")
-                    if href in found_links or "cast/" in href:
-                        continue
-                    found_links.add(href)
-
-                    # Název a obrázek
-                    title_elem = a.find(["h3", "h4", "div", "span"])
-                    title = title_elem.get_text(strip=True) if title_elem else a.get_text(strip=True)
-                    img_elem = a.find("img")
-                    img_src = img_elem.get("src") if img_elem else ""
-
-                    # Zjistit slug a případný idec
-                    parts = href.strip("/").split("/")
-                    show_slug = parts[1] if len(parts) > 1 else ""
-                    idec = parts[2] if len(parts) > 2 and parts[2].isdigit() else ""
-
-                    if show_slug:
-                        results.append({
-                            "title": title or show_slug,
-                            "slug": show_slug,
-                            "url": f"https://www.ceskatelevize.cz{href}",
-                            "image_url": img_src,
-                            "idec": idec
-                        })
-                return results
-        except Exception as e:
-            logger.error(f"Error searching online for '{query}': {e}")
-            return []
 
 ct_service = CTService()

@@ -53,8 +53,13 @@ class ArchiveCrawler:
                 slug=show_data["slug"],
                 description=show_data["description"],
                 image_url=show_data["image_url"],
+                poster_url=show_data.get("poster_url", ""),
+                backdrop_url=show_data.get("backdrop_url", ""),
+                logo_url=show_data.get("logo_url", ""),
                 genre=show_data["genre"],
                 year=show_data["year"],
+                show_type=show_data.get("show_type", "series"),
+                is_playable=show_data.get("is_playable", True),
                 total_episodes=len(show_data.get("episodes", []))
             )
 
@@ -69,11 +74,16 @@ class ArchiveCrawler:
                     image_url=ep.get("image_url", show_data["image_url"]),
                     duration=ep.get("duration", 0),
                     season=ep.get("season", 1),
-                    episode_num=ep.get("episode_num", 1)
+                    episode_num=ep.get("episode_num", 1),
+                    is_playable=ep.get("is_playable", True),
+                    is_drm=ep.get("is_drm", False)
                 )
 
             logger.info(f"Pořad úspěšně doindexován: {show_data['title']} ({len(show_data.get('episodes', []))} epizod)")
             return True
+        except Exception as e:
+            logger.error(f"Chyba při indexaci pořadu {slug_or_url}: {e}")
+            return False
         except Exception as e:
             logger.error(f"Chyba při indexaci pořadu {slug_or_url}: {e}")
             return False
@@ -116,11 +126,18 @@ class ArchiveCrawler:
                         desc = item.get("shortDescription") or ""
                         images = item.get("images") or {}
                         img_url = images.get("i480") or images.get("i300") or images.get("i220") or ""
+                        poster_url = images.get("poster") or images.get("poster2x") or img_url
+                        backdrop_url = images.get("desktop") or images.get("hero") or img_url
+                        logo_url = images.get("logo") or ""
 
                         # Žánry
                         card_genres = item.get("genresForCard", [])
                         genre_names = [g.get("title") for g in card_genres if g.get("title")]
                         genre = ", ".join(genre_names) if genre_names else cat_name
+
+                        raw_show_type = (item.get("showType") or "").lower()
+                        show_type = "movie" if ("film" in raw_show_type or "film" in cat_slug) else "series"
+                        is_playable = bool(item.get("playable", True))
 
                         crud.upsert_show(
                             show_id=show_id,
@@ -128,8 +145,13 @@ class ArchiveCrawler:
                             slug=slug,
                             description=desc,
                             image_url=img_url,
+                            poster_url=poster_url,
+                            backdrop_url=backdrop_url,
+                            logo_url=logo_url,
                             genre=genre,
                             year=str(item.get("year") or ""),
+                            show_type=show_type,
+                            is_playable=is_playable,
                             total_episodes=1
                         )
 
@@ -146,7 +168,9 @@ class ArchiveCrawler:
                                 image_url=img_url,
                                 duration=0,
                                 season=1,
-                                episode_num=1
+                                episode_num=1,
+                                is_playable=is_playable,
+                                is_drm=False
                             )
 
                         shows_added += 1

@@ -17,7 +17,7 @@
             <div class="mt-4 pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex items-center space-x-3.5">
                     <div class="w-12 h-10 bg-slate-950 rounded-lg flex items-center justify-center p-1.5 border border-slate-800 shrink-0">
-                        <img id="player-channel-logo" src="/static/logos/ct1.svg" class="max-h-full max-w-full object-contain" alt="Logo" />
+                        <img id="player-channel-logo" src="/static/logos/ct1.png" class="max-h-full max-w-full object-contain" alt="Logo" />
                     </div>
                     <div>
                         <div class="flex items-center space-x-2">
@@ -72,12 +72,12 @@
                 {% for ch in channels %}
                 {% set epg = live_epg.get(ch.id, {}) %}
                 {% set current_prog = epg.get('current', {}) %}
-                <button onclick="playChannel('{{ ch.id }}', '{{ ch.name }}', '{{ ch.logo }}', '{{ ch.description }}', '{{ current_prog.get('title', '')|replace('\'', '\\\'') }}')"
+                <button onclick="playChannel('{{ ch.id }}', '{{ ch.name }}', '{{ ch.logo_png or ch.logo }}', '{{ ch.description }}', '{{ current_prog.get('title', '')|replace('\'', '\\\'') }}')"
                         id="btn-{{ ch.id }}"
                         class="w-full text-left p-3 rounded-xl border border-slate-800/80 hover:border-blue-600/60 hover:bg-slate-800/60 transition flex items-center justify-between group channel-btn">
                     <div class="flex items-center space-x-3 min-w-0">
                         <div class="w-10 h-8 bg-slate-950 rounded-lg flex items-center justify-center p-1 border border-slate-800 shrink-0">
-                            <img src="{{ ch.logo }}" alt="{{ ch.name }}" class="max-h-full max-w-full object-contain" />
+                            <img src="{{ ch.logo_png or ch.logo }}" alt="{{ ch.name }}" class="max-h-full max-w-full object-contain" />
                         </div>
                         <div class="min-w-0">
                             <div class="text-sm font-semibold text-white group-hover:text-blue-400 transition flex items-center space-x-1.5">
@@ -142,13 +142,12 @@
             }
         });
 
-        // Konfigurace ovládacího panelu s volbou kvality
+        // Konfigurace ovládacího panelu specificky pro Live TV
         ui.configure({
             controlPanelElements: [
                 'play_pause',
-                'time_and_duration',
+                'live',
                 'spacer',
-                'mute',
                 'volume',
                 'quality',
                 'overflow_menu',
@@ -156,13 +155,13 @@
             ],
             overflowMenuButtons: [
                 'quality',
-                'language',
-                'playback_rate'
-            ]
+                'language'
+            ],
+            trackLabelFormat: (window.shaka && shaka.ui && shaka.ui.TrackLabelFormat) ? shaka.ui.TrackLabelFormat.RESOLUTION : 2
         });
 
         // Automatické spuštění ČT1
-        playChannel('CH_1', 'ČT1', '/static/logos/ct1.svg', 'Hlavní rodinný program České televize', '');
+        playChannel('CH_1', 'ČT1', '/static/logos/ct1.png', 'Hlavní rodinný program České televize', '');
     }
 
     document.addEventListener('shaka-ui-loaded', initShaka);

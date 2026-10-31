@@ -1,5 +1,6 @@
 import sqlite3
 import time
+import secrets
 from pathlib import Path
 from contextlib import contextmanager
 from app.core.config import settings
@@ -26,16 +27,23 @@ def get_db():
     finally:
         conn.close()
 
+def _add_column_if_not_exists(cursor, table: str, column: str, col_def: str):
+    cursor.execute(f"PRAGMA table_info({table});")
+    cols = [row[1] for row in cursor.fetchall()]
+    if column not in cols:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def};")
+
 def init_db():
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         # 1. Tabulka uživatelů
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            user_token TEXT UNIQUE,
             is_admin INTEGER DEFAULT 0,
             is_active INTEGER DEFAULT 1,
             exp_date INTEGER,
@@ -44,8 +52,9 @@ def init_db():
             last_active INTEGER
         );
         """)
-        
-        # 2. Tabulka pořadů (katalog VOD)
+        _add_column_if_not_exists(cursor, "users", "user_token", "TEXT")
+
+        # 2. Tabulka pořadů (katalog VOD - filmy i seriály)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS shows (
             id TEXT PRIMARY KEY,
@@ -53,13 +62,27 @@ def init_db():
             slug TEXT,
             description TEXT,
             image_url TEXT,
+            poster_url TEXT,
+            backdrop_url TEXT,
+            logo_url TEXT,
             genre TEXT,
             year TEXT,
+            show_type TEXT DEFAULT 'series',
+            is_playable INTEGER DEFAULT 1,
             total_episodes INTEGER DEFAULT 0,
             updated_at INTEGER
         );
         """)
-        
+        _add_column_if_not_exists(cursor, "shows", "poster_url", "TEXT")
+        _add_column_if_not_exists(cursor, "shows", "backdrop_url", "TEXT")
+        _add_column_if_not_exists(cursor, "shows", "logo_url", "TEXT")
+        _add_column_if_not_exists(cursor, "shows", "show_type", "TEXT DEFAULT 'series'")
+        _add_column_if_not_exists(cursor, "shows", "is_playable", "INTEGER DEFAULT 1")
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_genre ON shows(genre);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_type ON shows(show_type);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_playable ON shows(is_playable);")
+
         # 3. Tabulka epizod
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
@@ -78,8 +101,12 @@ def init_db():
             FOREIGN KEY (show_id) REFERENCES shows(id) ON DELETE CASCADE
         );
         """)
+        _add_column_if_not_exists(cursor, "episodes", "is_playable", "INTEGER DEFAULT 1")
+        _add_column_if_not_exists(cursor, "episodes", "is_drm", "INTEGER DEFAULT 0")
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodes_show_id ON episodes(show_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodes_idec ON episodes(idec);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodes_season ON episodes(season);")
 
         # 4. Tabulka úloh stahování
         cursor.execute("""
@@ -106,14 +133,23 @@ def init_db():
             value TEXT
         );
         """)
-        
+
         # Vytvoření výchozího administrátora, pokud ještě neexistuje
-        cursor.execute("SELECT id FROM users WHERE username = ?", (settings.DEFAULT_ADMIN_USER,))
+        cursor.execute("SELECT id, user_token FROM users WHERE username = ?", (settings.DEFAULT_ADMIN_USER,))
         admin = cursor.fetchone()
         if not admin:
             now = int(time.time())
             pwd_hash = get_password_hash(settings.DEFAULT_ADMIN_PASS)
+            token = secrets.token_hex(16)
             cursor.execute("""
-            INSERT INTO users (username, password_hash, is_admin, is_active, max_connections, created_at, last_active)
-            VALUES (?, ?, 1, 1, 10, ?, ?)
-            """, (settings.DEFAULT_ADMIN_USER, pwd_hash, now, now))
+            INSERT INTO users (username, password_hash, user_token, is_admin, is_active, max_connections, created_at, last_active)
+            VALUES (?, ?, ?, 1, 1, 10, ?, ?)
+            """, (settings.DEFAULT_ADMIN_USER, pwd_hash, token, now, now))
+        elif not admin["user_token"]:
+            token = secrets.token_hex(16)
+            cursor.execute("UPDATE users SET user_token = ? WHERE id = ?", (token, admin["id"]))
+
+        # Zajištění tokenů pro všechny existující uživatele
+        cursor.execute("SELECT id FROM users WHERE user_token IS NULL OR user_token = ''")
+        for u in cursor.fetchall():
+            cursor.execute("UPDATE users SET user_token = ? WHERE id = ?", (secrets.token_hex(16), u["id"]))

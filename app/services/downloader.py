@@ -64,28 +64,37 @@ class DownloadManager:
 
         crud.update_download_task(task_id, status="downloading", progress=0.0)
 
-        # 1. Získat HLS stream URL
+        # 1. Získat HLS stream URL (bez DRM)
         stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
         if not stream_data or not stream_data.get("url"):
-            crud.update_download_task(
-                task_id,
-                status="failed",
-                error_message="Pořad vyžaduje DRM nebo nelze získat volný stream z ČT CDN."
-            )
+            # Zjistíme, zda je pořad chráněn DRM nebo zcela nedostupný
+            drm_check = await ct_service.resolve_vod_stream(idec, allow_drm=True)
+            if drm_check and drm_check.get("is_drm"):
+                crud.update_download_task(
+                    task_id,
+                    status="failed",
+                    error_message="Pořad je chráněn šifrováním Widevine DRM a nelze jej stáhnout jako prostý MP4 soubor."
+                )
+            else:
+                crud.update_download_task(
+                    task_id,
+                    status="failed",
+                    error_message="Pořad není dostupný v archivu ČT (práva vypršela nebo stream nelze načíst)."
+                )
             return
 
         stream_url = stream_data["url"]
         output_filename = f"{title}_{idec}.mp4"
         output_filepath = settings.DOWNLOAD_DIR / output_filename
 
-        # 2. Spustit ffmpeg pro stažení HLS do MP4
+        # 2. Spustit ffmpeg pro stažení HLS do MP4 bez problematického aac_adtstoasc filtru
+        headers_str = f"User-Agent: {settings.USER_AGENT}\r\nReferer: https://www.ceskatelevize.cz/\r\nOrigin: https://www.ceskatelevize.cz\r\n"
         cmd = [
             "ffmpeg",
             "-y",
-            "-headers", f"User-Agent: {settings.USER_AGENT}\r\nReferer: https://www.ceskatelevize.cz/\r\n",
+            "-headers", headers_str,
             "-i", stream_url,
             "-c", "copy",
-            "-bsf:a", "aac_adtstoasc",
             "-movflags", "+faststart",
             str(output_filepath)
         ]
@@ -98,16 +107,20 @@ class DownloadManager:
             )
             self._active_processes[task_id] = process
 
-            # Sledování průběhu stahování ze standardního chybového výstupu ffmpeg
+            # Sledování průběhu stahování a ukládání posledních řádků stderr pro případ chyby
             duration = 0.0
             time_pattern = re.compile(r'time=(\d+):(\d+):(\d+\.\d+)')
             duration_pattern = re.compile(r'Duration: (\d+):(\d+):(\d+\.\d+)')
+            stderr_lines = []
 
             while True:
                 line = await process.stderr.readline()
                 if not line:
                     break
                 line_str = line.decode('utf-8', errors='ignore')
+                stderr_lines.append(line_str.strip())
+                if len(stderr_lines) > 30:
+                    stderr_lines.pop(0)
 
                 if not duration:
                     dur_match = duration_pattern.search(line_str)
@@ -125,7 +138,7 @@ class DownloadManager:
             await process.wait()
             self._active_processes.pop(task_id, None)
 
-            if process.returncode == 0 and output_filepath.exists():
+            if process.returncode == 0 and output_filepath.exists() and output_filepath.stat().st_size > 0:
                 filesize = output_filepath.stat().st_size
                 crud.update_download_task(
                     task_id,
@@ -136,10 +149,11 @@ class DownloadManager:
                 )
                 logger.info(f"Download finished: {output_filepath} ({filesize} bytes)")
             else:
+                last_err = "; ".join([l for l in stderr_lines[-3:] if l]) or f"kód {process.returncode}"
                 crud.update_download_task(
                     task_id,
                     status="failed",
-                    error_message=f"FFmpeg skončil s kódem {process.returncode}"
+                    error_message=f"FFmpeg chyba ({last_err})"
                 )
         except asyncio.CancelledError:
             if task_id in self._active_processes:

@@ -76,6 +76,23 @@ async def archive_page(
     offset = (page - 1) * limit
     shows = crud.list_shows(genre=genre, search=q, limit=limit, offset=offset)
     total_shows = crud.count_shows(genre=genre, search=q)
+
+    # Pokud uživatel vyhledává a máme málo výsledků, prohledáme přímo GraphQL ČT
+    if q and q.strip() and len(shows) < 6 and page == 1:
+        try:
+            external_results = await ct_service.search_shows_graphql(q.strip(), limit=15)
+            seen_ids = {s["id"] for s in shows}
+            for res in external_results:
+                sidp = res.get("sidp")
+                if sidp and sidp not in seen_ids:
+                    show_meta = await ct_service.scrape_show_metadata(sidp)
+                    if show_meta:
+                        shows.append(show_meta)
+                        seen_ids.add(sidp)
+            total_shows = max(total_shows, len(shows))
+        except Exception as e:
+            logger.warning(f"GraphQL search error in archive_page: {e}")
+
     total_pages = max(1, (total_shows + limit - 1) // limit)
     genres = crud.list_genres()
 
@@ -99,20 +116,34 @@ async def show_detail_page(request: Request, show_id: str):
         return RedirectResponse(url="/login", status_code=303)
 
     show = crud.get_show_by_id(show_id)
-    if not show:
-        # Zkusíme doindexovat on-demand
-        success = await archive_crawler.index_show(show_id)
-        if success:
-            show = crud.get_show_by_id(show_id)
+    if not show or (show.get("show_type") == "series" and len(crud.get_episodes_by_show(show_id)) <= 1):
+        # Načteme kompletní metadata a epizody z ČT
+        scraped = await ct_service.scrape_show_metadata(show_id)
+        if scraped:
+            show = crud.get_show_by_id(show_id) or scraped
+            
     if not show:
         raise HTTPException(status_code=404, detail="Pořad nebyl nalezen")
 
     episodes = crud.get_episodes_by_show(show_id)
+    
+    # Rozdělení epizod podle sérií
+    seasons = {}
+    for ep in episodes:
+        s_num = ep.get("season", 1) or 1
+        if s_num not in seasons:
+            seasons[s_num] = []
+        seasons[s_num].append(ep)
+    
+    sorted_seasons = sorted(seasons.keys())
+
     return templates.TemplateResponse(request=request, name="show_detail.html", context={
         "user": user,
         "is_default_password": is_using_default_password(user),
         "show": show,
         "episodes": episodes,
+        "seasons": seasons,
+        "sorted_seasons": sorted_seasons,
         "active_tab": "archive"
     })
 
@@ -135,6 +166,15 @@ async def add_download_api(request: Request, idec: str = Form(...), title: str =
     user = get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Nepřihlášen")
+    
+    # Okamžitá kontrola zda pořad nevyžaduje Widevine DRM
+    stream_check = await ct_service.resolve_vod_stream(idec, allow_drm=True)
+    if stream_check and stream_check.get("is_drm"):
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "detail": "Tento pořad je chráněn Widevine DRM a nelze jej stáhnout jako prostý MP4 soubor."}
+        )
+
     task_id = await download_manager.add_download(idec, title)
     return {"status": "ok", "task_id": task_id}
 
@@ -189,7 +229,11 @@ async def stremio_page(request: Request):
         return RedirectResponse(url="/login", status_code=303)
 
     base_url = get_base_url(request)
-    manifest_url = f"{base_url}/stremio/manifest.json"
+    user_token = user.get("user_token")
+    if user_token:
+        manifest_url = f"{base_url}/stremio/{user_token}/manifest.json"
+    else:
+        manifest_url = f"{base_url}/stremio/manifest.json"
     stremio_link = f"stremio://{manifest_url.split('://')[-1]}"
 
     return templates.TemplateResponse(request=request, name="stremio.html", context={
