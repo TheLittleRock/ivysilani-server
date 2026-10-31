@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  ivysilani-server:
+    image: ghcr.io/thelittlerock/ivysilani-server:latest
+    # Pro lokální sestavení odkomentujte následující řádek a zakomentujte image výše:
+    # build: .
+    container_name: ivysilani-server
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - STREAM_MODE=redirect       # "redirect" pro přímé přesměrování na ČT CDN (doporučeno), "proxy" pro proxování přes server
+      - BASE_URL=                  # Volitelně veřejná URL, např. https://ivysilani.mojedomena.cz (důležité pro reverzní proxy / NPM)
+      - DEFAULT_ADMIN_USER=admin
+      - DEFAULT_ADMIN_PASSWORD=admin
+      - TZ=Europe/Prague
+    volumes:
+      - ./data:/data
+      - ./downloads:/downloads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

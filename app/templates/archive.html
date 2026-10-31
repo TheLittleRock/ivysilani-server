@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Archiv a katalog iVysílání - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Horní lišta s vyhledáváním a filtrem žánrů -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-xl font-bold text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-film text-blue-500"></i>
+                    <span>Katalog a archiv pořadů</span>
+                </h1>
+                <p class="text-xs text-slate-400 mt-0.5">Procházejte synchronizované pořady ČT nebo přidejte jakýkoliv pořad zadáním odkazu.</p>
+            </div>
+
+            <!-- Tlačítko přidat pořad -->
+            <button onclick="document.getElementById('modal-add-show').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2 shadow-sm self-start md:self-auto">
+                <i class="fa-solid fa-plus"></i>
+                <span>Přidat pořad z iVysílání</span>
+            </button>
+        </div>
+
+        <!-- Formulář pro vyhledávání a žánry -->
+        <form method="GET" action="/archive" class="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-800/80">
+            <!-- Fulltextové hledání -->
+            <div class="relative flex-grow">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500 text-sm">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </span>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Hledat v archivu pořadů..."
+                       class="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition" />
+            </div>
+
+            <!-- Výběr žánru -->
+            <div class="w-full sm:w-64">
+                <select name="genre" onchange="this.form.submit()"
+                        class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition">
+                    <option value="all" {% if current_genre == 'all' %}selected{% endif %}>Všechny žánry</option>
+                    {% for g in genres %}
+                    <option value="{{ g }}" {% if current_genre == g %}selected{% endif %}>{{ g }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium px-5 py-2 rounded-xl transition">
+                Filtrovat
+            </button>
+        </form>
+    </div>
+
+    <!-- Výpis pořadů -->
+    {% if shows %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        {% for s in shows %}
+        <a href="/show/{{ s.id }}" class="group bg-slate-900 border border-slate-800/80 hover:border-blue-500/50 rounded-xl overflow-hidden shadow-lg transition flex flex-col">
+            <!-- Plakát / Náhled -->
+            <div class="aspect-[16/9] w-full bg-slate-950 relative overflow-hidden">
+                {% if s.image_url %}
+                <img src="{{ s.image_url }}" alt="{{ s.title }}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" loading="lazy" />
+                {% else %}
+                <div class="w-full h-full flex items-center justify-center text-slate-700 text-3xl">
+                    <i class="fa-solid fa-film"></i>
+                </div>
+                {% endif %}
+                <div class="absolute bottom-1 right-1 bg-black/70 backdrop-blur-sm text-[10px] font-semibold text-slate-300 px-1.5 py-0.5 rounded">
+                    {{ s.genre or 'Pořad' }}
+                </div>
+            </div>
+
+            <!-- Informace -->
+            <div class="p-3 flex-grow flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold text-white group-hover:text-blue-400 transition line-clamp-1">{{ s.title }}</h3>
+                    <p class="text-[11px] text-slate-400 mt-1 line-clamp-2">{{ s.description }}</p>
+                </div>
+                <div class="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>{{ s.year or '' }}</span>
+                    <span class="text-blue-400 font-semibold group-hover:underline">Přehrát &rarr;</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Stránkování -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-center space-x-2 pt-4">
+        {% if page > 1 %}
+        <a href="/archive?genre={{ current_genre }}&q={{ search_query }}&page={{ page - 1 }}" class="px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 transition">
+            &larr; Předchozí
+        </a>
+        {% endif %}
+        <span class="text-xs text-slate-400 px-3">Strana {{ page }} z {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="/archive?genre={{ current_genre }}&q={{ search_query }}&page={{ page + 1 }}" class="px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 transition">
+            Další &rarr;
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
+        <div class="text-slate-600 text-5xl">
+            <i class="fa-solid fa-film"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Nebyly nalezeny žádné pořady</h3>
+        <p class="text-xs text-slate-400 max-w-md mx-auto">Zkuste změnit vyhledávací dotaz, nebo vložte přímý odkaz na jakýkoliv pořad z iVysílání České televize.</p>
+        <button onclick="document.getElementById('modal-add-show').classList.remove('hidden')" class="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition inline-block">
+            Přidat pořad z webu iVysílání
+        </button>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Modal: Přidat pořad z iVysílání -->
+<div id="modal-add-show" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-cloud-arrow-down text-blue-500"></i>
+                <span>Přidat pořad do katalogu</span>
+            </h3>
+            <button onclick="document.getElementById('modal-add-show').classList.add('hidden')" class="text-slate-500 hover:text-white transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <p class="text-xs text-slate-400">Vložte odkaz nebo slug pořadu ze stránek České televize (např. <code class="text-blue-400">https://www.ceskatelevize.cz/porady/1097181328-udalosti/</code> nebo jen <code class="text-blue-400">1097181328-udalosti</code>):</p>
+
+        <form id="form-index-show" onsubmit="submitIndexShow(event)" class="space-y-3">
+            <input type="text" id="input-show-url" required placeholder="https://www.ceskatelevize.cz/porady/..."
+                   class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition" />
+            <div id="index-msg" class="text-xs hidden"></div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button type="button" onclick="document.getElementById('modal-add-show').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition">
+                    Zrušit
+                </button>
+                <button type="submit" id="btn-submit-index" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5">
+                    <span>Indexovat a uložit</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    async function submitIndexShow(e) {
+        e.preventDefault();
+        const urlInput = document.getElementById('input-show-url');
+        const submitBtn = document.getElementById('btn-submit-index');
+        const msg = document.getElementById('index-msg');
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Indexuji...';
+        msg.className = 'text-xs text-slate-400 block';
+        msg.textContent = 'Stahuji metadata pořadu z České televize...';
+
+        const formData = new FormData();
+        formData.append('url', urlInput.value.trim());
+
+        try {
+            const resp = await fetch('/admin/index-show', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.status === 'ok') {
+                msg.className = 'text-xs text-emerald-400 block';
+                msg.textContent = 'Pořad byl úspěšně přidán do katalogu! Obnovuji stránku...';
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                msg.className = 'text-xs text-red-400 block';
+                msg.textContent = 'Chyba: Nepodařilo se načíst data pořadu. Zkontrolujte prosím zadaný odkaz.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Indexovat a uložit';
+            }
+        } catch (err) {
+            msg.className = 'text-xs text-red-400 block';
+            msg.textContent = 'Chyba spojení se serverem.';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Indexovat a uložit';
+        }
+    }
+</script>
+{% endblock %}

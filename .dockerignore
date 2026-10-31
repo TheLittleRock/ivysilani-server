@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+data/
+downloads/
+.pytest_cache/
+.git/
+.github/
+.vscode/
+.idea/
+tmp/
+*.log

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Přihlášení - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto my-12">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+        <div class="text-center space-y-2">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 text-xl font-bold mb-1">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h1 class="text-2xl font-black text-white">Přihlášení k serveru</h1>
+            <p class="text-xs text-slate-400">Přihlaste se jako administrátor pro správu uživatelů a nastavení.</p>
+        </div>
+
+        {% if error %}
+        <div class="p-3 bg-red-950/60 border border-red-800 rounded-xl text-red-300 text-xs text-center flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/login" class="space-y-4 text-xs">
+            <div>
+                <label class="block text-slate-400 mb-1 font-medium">Uživatelské jméno:</label>
+                <input type="text" name="username" required value="admin"
+                       class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition" />
+            </div>
+
+            <div>
+                <label class="block text-slate-400 mb-1 font-medium">Heslo:</label>
+                <input type="password" name="password" required value="admin"
+                       class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition" />
+            </div>
+
+            <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-600/25">
+                Přihlásit se
+            </button>
+        </form>
+
+        <div class="text-center pt-2 border-t border-slate-800/80 text-[11px] text-slate-500">
+            Výchozí přihlašovací údaje: <code class="text-blue-400">admin</code> / <code class="text-blue-400">admin</code>
+        </div>
+    </div>
+</div>
+{% endblock %}

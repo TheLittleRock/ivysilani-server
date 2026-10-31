@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Správce stahování - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-xl font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-download text-blue-500"></i>
+                <span>Správce stahování na disk</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-0.5">Uložená videa v MP4 na disku serveru (ve složce <code class="text-blue-400">/downloads</code>) pro offline přehrávání.</p>
+        </div>
+        <button onclick="window.location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3.5 py-2 rounded-xl transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span>Obnovit přehled</span>
+        </button>
+    </div>
+
+    <!-- Přehrávač pro stažené soubory -->
+    <div id="local-player-box" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hidden">
+        <div class="aspect-video w-full bg-black rounded-xl overflow-hidden relative">
+            <video id="local-video" class="w-full h-full" controls playsinline></video>
+        </div>
+        <div class="mt-3 flex items-center justify-between">
+            <h3 id="local-video-title" class="text-sm font-bold text-white"></h3>
+            <button onclick="document.getElementById('local-player-box').classList.add('hidden')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition">
+                Zavřít
+            </button>
+        </div>
+    </div>
+
+    <!-- Seznam úloh -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        {% if tasks %}
+        <div class="space-y-3">
+            {% for t in tasks %}
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="space-y-1.5 flex-grow">
+                    <div class="flex items-center space-x-2">
+                        {% if t.status == 'completed' %}
+                        <span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold">DOKONČENO</span>
+                        {% elif t.status == 'downloading' %}
+                        <span class="px-2 py-0.5 bg-blue-950 text-blue-400 border border-blue-800 rounded text-[10px] font-bold animate-pulse">STAHOVÁNÍ</span>
+                        {% elif t.status == 'failed' %}
+                        <span class="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded text-[10px] font-bold">CHYBA</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px] font-bold">{{ t.status|upper }}</span>
+                        {% endif %}
+                        <h4 class="text-sm font-bold text-white">{{ t.title }}</h4>
+                    </div>
+
+                    <!-- Průběh stahování -->
+                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden max-w-md">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ t.progress }}%"></div>
+                    </div>
+
+                    <div class="text-[11px] text-slate-400 flex items-center space-x-3">
+                        <span>Průběh: <strong class="text-white">{{ t.progress }}%</strong></span>
+                        {% if t.filesize %}
+                        <span>Velikost: <strong class="text-white">{{ (t.filesize / 1024 / 1024)|round(1) }} MB</strong></span>
+                        {% endif %}
+                        {% if t.error_message %}
+                        <span class="text-red-400">{{ t.error_message }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Tlačítka -->
+                <div class="flex items-center space-x-2 self-end md:self-auto">
+                    {% if t.status == 'completed' %}
+                    <button onclick="playLocalFile('{{ t.id }}', '{{ t.title }}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                        <span>Přehrát z disku</span>
+                    </button>
+                    {% endif %}
+                    <button onclick="deleteTask('{{ t.id }}')" class="px-3 py-1.5 bg-slate-800 hover:bg-red-900/60 text-slate-400 hover:text-red-200 text-xs font-semibold rounded-lg transition" title="Smazat soubor i úlohu">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-10 space-y-2">
+            <div class="text-slate-700 text-4xl">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+            </div>
+            <p class="text-xs text-slate-400">Zatím jste nestáhli žádné pořady. V katalogu archivu stačí u kterékoliv epizody kliknout na tlačítko <strong>Stáhnout</strong>.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function playLocalFile(taskId, title) {
+        const box = document.getElementById('local-player-box');
+        const video = document.getElementById('local-video');
+        box.classList.remove('hidden');
+        document.getElementById('local-video-title').textContent = title;
+        video.src = `/downloads/file/${taskId}`;
+        video.play();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteTask(taskId) {
+        if (!confirm('Opravdu chcete smazat tuto úlohu a její soubor z disku?')) {
+            return;
+        }
+        try {
+            const resp = await fetch(`/api/downloads/${taskId}`, { method: 'DELETE' });
+            if (resp.ok) {
+                window.location.reload();
+            }
+        } catch (e) {
+            alert('Chyba při mazání úlohy.');
+        }
+    }
+</script>
+{% endblock %}

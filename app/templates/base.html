@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="cs" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}iVysílání Server{% endblock %}</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ct: {
+                            blue: '#005CA9',
+                            dark: '#0e1726',
+                            card: '#1b2e4b',
+                            accent: '#3b82f6'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Video.js -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <!-- Video.js Contrib EME pro DRM -->
+    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-eme@5.3.0/dist/videojs-contrib-eme.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <style>
+        .video-js {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .vjs-theme-forest {
+            --vjs-theme-forest--primary: #3b82f6;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+
+    <!-- Horní navigace -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <a href="/" class="flex items-center space-x-2 text-xl font-bold tracking-tight text-white hover:text-blue-400 transition">
+                    <span class="bg-blue-600 text-white px-2.5 py-1 rounded-lg text-sm font-black tracking-wider uppercase shadow-md shadow-blue-500/20">ČT</span>
+                    <span>iVysílání <span class="text-blue-500 text-sm font-semibold">Server</span></span>
+                </a>
+            </div>
+
+            <!-- Navigační menu -->
+            <nav class="hidden md:flex items-center space-x-1">
+                <a href="/" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'live' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                    <i class="fa-solid fa-satellite-dish text-xs"></i>
+                    <span>Živě (Live TV)</span>
+                </a>
+                <a href="/archive" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'archive' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                    <i class="fa-solid fa-film text-xs"></i>
+                    <span>Archiv (VOD)</span>
+                </a>
+                <a href="/downloads" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'downloads' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                    <i class="fa-solid fa-download text-xs"></i>
+                    <span>Stahování</span>
+                </a>
+                <a href="/xtream" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'xtream' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                    <i class="fa-solid fa-tv text-xs"></i>
+                    <span>Xtream Codes & M3U</span>
+                </a>
+                {% if user and user.is_admin %}
+                <a href="/admin" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'admin' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                    <i class="fa-solid fa-users-gear text-xs"></i>
+                    <span>Správa uživatelů</span>
+                </a>
+                {% endif %}
+            </nav>
+
+            <!-- Uživatelský profil / Odhlášení -->
+            <div class="flex items-center space-x-3">
+                {% if user %}
+                <div class="text-xs text-slate-400 hidden sm:block">
+                    Přihlášen: <span class="font-semibold text-white">{{ user.username }}</span>
+                </div>
+                <a href="/logout" class="text-xs bg-slate-800 hover:bg-red-900/60 text-slate-300 hover:text-red-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+                    Odhlásit
+                </a>
+                {% else %}
+                <a href="/login" class="text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-3.5 py-1.5 rounded-lg shadow-sm transition">
+                    Přihlásit
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <!-- Hlavní obsah -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Patička -->
+    <footer class="border-t border-slate-800/80 bg-slate-900/40 py-6 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
+            <p>iVysílání Server &copy; 2026. Založeno na práci komunitních projektů <a href="https://github.com/waladir/plugin.video.ivysilani.cz" target="_blank" class="text-blue-400 hover:underline">plugin.video.ivysilani.cz</a> &amp; <a href="https://github.com/sunecz/Media-Downloader" target="_blank" class="text-blue-400 hover:underline">Media-Downloader</a>.</p>
+            <div class="flex items-center space-x-4">
+                <span class="text-slate-400"><i class="fa-solid fa-server mr-1"></i> Port 5002</span>
+                <span class="text-emerald-400"><i class="fa-solid fa-circle text-[8px] mr-1"></i> Připraveno</span>
+            </div>
+        </div>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

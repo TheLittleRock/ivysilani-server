@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Správa uživatelů - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-xl font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-users-gear text-blue-500"></i>
+                <span>Správa uživatelů a účtů</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-0.5">Vytvářejte účty pro rodinu a známé pro přihlášení do IPTV aplikací přes Xtream Codes.</p>
+        </div>
+        <button onclick="document.getElementById('modal-add-user').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>Vytvořit uživatele</span>
+        </button>
+    </div>
+
+    <!-- Tabulka uživatelů -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-950/80 border-b border-slate-800 text-slate-400 uppercase font-semibold">
+                    <tr>
+                        <th class="p-4">ID</th>
+                        <th class="p-4">Uživatel</th>
+                        <th class="p-4">Role</th>
+                        <th class="p-4">Stav</th>
+                        <th class="p-4">Max spojení</th>
+                        <th class="p-4 text-right">Akce</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60">
+                    {% for u in users %}
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="p-4 text-slate-500 font-mono">{{ u.id }}</td>
+                        <td class="p-4 font-bold text-white flex items-center space-x-2">
+                            <span class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-blue-400">
+                                <i class="fa-solid fa-user text-xs"></i>
+                            </span>
+                            <span>{{ u.username }}</span>
+                        </td>
+                        <td class="p-4">
+                            {% if u.is_admin %}
+                            <span class="px-2 py-0.5 bg-purple-950 text-purple-400 border border-purple-800 rounded text-[10px] font-bold">ADMIN</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-medium">UŽIVATEL</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-4">
+                            {% if u.is_active %}
+                            <span class="text-emerald-400 flex items-center space-x-1">
+                                <i class="fa-solid fa-circle text-[6px]"></i>
+                                <span>Aktivní</span>
+                            </span>
+                            {% else %}
+                            <span class="text-red-400 flex items-center space-x-1">
+                                <i class="fa-solid fa-circle text-[6px]"></i>
+                                <span>Zablokován</span>
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="p-4 text-slate-400">{{ u.max_connections }}</td>
+                        <td class="p-4 text-right space-x-2">
+                            {% if not u.is_admin or users|length > 1 %}
+                            <form method="POST" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Opravdu chcete smazat uživatele {{ u.username }}?')" class="inline">
+                                <button type="submit" class="p-2 text-slate-500 hover:text-red-400 transition" title="Smazat uživatele">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: Přidat uživatele -->
+<div id="modal-add-user" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-user-plus text-blue-500"></i>
+                <span>Nový uživatel</span>
+            </h3>
+            <button onclick="document.getElementById('modal-add-user').classList.add('hidden')" class="text-slate-500 hover:text-white transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form method="POST" action="/admin/users/create" class="space-y-3 text-xs">
+            <div>
+                <label class="block text-slate-400 mb-1">Uživatelské jméno:</label>
+                <input type="text" name="username" required placeholder="např. loznice_tv"
+                       class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div>
+                <label class="block text-slate-400 mb-1">Heslo:</label>
+                <input type="password" name="password" required placeholder="Zadejte heslo..."
+                       class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div>
+                <label class="block text-slate-400 mb-1">Maximální počet souběžných spojení:</label>
+                <input type="number" name="max_connections" value="2" min="1" max="10"
+                       class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div class="flex items-center space-x-2 pt-2">
+                <input type="checkbox" name="is_admin" id="chk-admin" class="rounded bg-slate-950 border-slate-800 text-blue-600 focus:ring-0" />
+                <label for="chk-admin" class="text-slate-300">Udělit oprávnění administrátora</label>
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-4">
+                <button type="button" onclick="document.getElementById('modal-add-user').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl transition">
+                    Zrušit
+                </button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition">
+                    Vytvořit
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

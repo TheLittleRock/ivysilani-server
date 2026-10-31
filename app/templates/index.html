@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Živé vysílání ČT - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Levý / Hlavní sloupec: Video Player -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+            <!-- Přehrávač kontejner -->
+            <div class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner">
+                <video id="ct-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline>
+                    <p class="vjs-no-js">Pro přehrávání videa prosím povolte JavaScript a použijte moderní webový prohlížeč.</p>
+                </video>
+            </div>
+
+            <!-- Informace o právě hrajícím kanálu -->
+            <div class="mt-4 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <img id="player-channel-logo" src="https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct1.svg" class="h-8 object-contain" alt="Logo kanálu" />
+                    <div>
+                        <h2 id="player-channel-title" class="text-lg font-bold text-white">ČT1</h2>
+                        <p id="player-channel-desc" class="text-xs text-slate-400">Hlavní rodinný program České televize</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-950 text-red-400 border border-red-800 animate-pulse">
+                        <i class="fa-solid fa-circle text-[6px] mr-1.5"></i> ŽIVĚ
+                    </span>
+                    <button onclick="reloadCurrentStream()" class="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition" title="Znovu načíst stream">
+                        <i class="fa-solid fa-rotate-right text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rychlý návod k IPTV -->
+        <div class="bg-blue-950/40 border border-blue-900/60 rounded-xl p-4 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-lg">
+                    <i class="fa-solid fa-tv"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-white">Chcete sledovat ČT ve své televizi (TiviMate / IPTV Smarters)?</h3>
+                    <p class="text-xs text-slate-400">Využijte vygenerované Xtream Codes údaje nebo přímý M3U playlist.</p>
+                </div>
+            </div>
+            <a href="/xtream" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">
+                Zobrazit nastavení
+            </a>
+        </div>
+    </div>
+
+    <!-- Pravý sloupec: Výběr kanálů -->
+    <div class="space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+                <span>Kanály České televize</span>
+                <span class="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-normal">14 stanic</span>
+            </h3>
+
+            <div class="space-y-2 max-h-[620px] overflow-y-auto pr-1">
+                {% for ch in channels %}
+                <button onclick="playChannel('{{ ch.id }}', '{{ ch.name }}', '{{ ch.logo }}', '{{ ch.description }}')"
+                        id="btn-{{ ch.id }}"
+                        class="w-full text-left p-3 rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-800/60 transition flex items-center justify-between group channel-btn">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-8 bg-slate-950 rounded-lg flex items-center justify-center p-1 border border-slate-800">
+                            <img src="{{ ch.logo }}" alt="{{ ch.name }}" class="max-h-full max-w-full object-contain" />
+                        </div>
+                        <div>
+                            <div class="text-sm font-semibold text-white group-hover:text-blue-400 transition">{{ ch.name }}</div>
+                            <div class="text-[11px] text-slate-500 line-clamp-1">{{ ch.description }}</div>
+                        </div>
+                    </div>
+                    <span class="text-xs text-slate-600 group-hover:text-blue-400 transition">
+                        <i class="fa-solid fa-play text-xs"></i>
+                    </span>
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let player = null;
+    let currentChannelId = 'CH_1';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        player = videojs('ct-player', {
+            autoplay: true,
+            muted: true,
+            fluid: true,
+            html5: {
+                vhs: {
+                    overrideNative: true
+                }
+            }
+        });
+
+        if (typeof player.eme === 'function') {
+            player.eme();
+        }
+
+        // Spustit ČT1 jako výchozí
+        playChannel('CH_1', 'ČT1', 'https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct1.svg', 'Hlavní program České televize – rodinná televize, seriály, zábava, zprávy.');
+    });
+
+    async function playChannel(channelId, name, logo, desc) {
+        currentChannelId = channelId;
+
+        // Aktualizovat aktivní tlačítko
+        document.querySelectorAll('.channel-btn').forEach(b => {
+            b.classList.remove('bg-blue-950/40', 'border-blue-600');
+        });
+        const activeBtn = document.getElementById(`btn-${channelId}`);
+        if (activeBtn) {
+            activeBtn.classList.add('bg-blue-950/40', 'border-blue-600');
+        }
+
+        // Aktualizovat UI
+        document.getElementById('player-channel-title').textContent = name;
+        document.getElementById('player-channel-logo').src = logo;
+        document.getElementById('player-channel-desc').textContent = desc;
+
+        try {
+            const resp = await fetch(`/api/stream/live/${channelId}`);
+            if (!resp.ok) {
+                alert('Chyba při načítání živého streamu z ČT.');
+                return;
+            }
+            const data = await resp.json();
+
+            player.src({
+                src: data.url,
+                type: 'application/x-mpegURL'
+            });
+            player.play();
+        } catch (e) {
+            console.error('Chyba přehrávače:', e);
+        }
+    }
+
+    function reloadCurrentStream() {
+        if (currentChannelId) {
+            const btn = document.getElementById(`btn-${currentChannelId}`);
+            if (btn) btn.click();
+        }
+    }
+</script>
+{% endblock %}

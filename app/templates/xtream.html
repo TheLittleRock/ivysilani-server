@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Nastavení Xtream Codes & M3U - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <h1 class="text-xl font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-satellite-dish text-blue-500"></i>
+            <span>Připojení k IPTV (Xtream Codes &amp; M3U)</span>
+        </h1>
+        <p class="text-xs text-slate-400 mt-1">
+            Zde naleznete přihlašovací údaje pro vaši chytrou TV, mobilní aplikaci nebo mediální centrum (TiviMate, IPTV Smarters, Kodi, VLC atd.).
+        </p>
+    </div>
+
+    <!-- Parametry pro Xtream Codes Login -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Karta 1: Xtream Codes API přihlášení -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-blue-400 flex items-center space-x-2">
+                <i class="fa-solid fa-key"></i>
+                <span>Xtream Codes Přihlášení</span>
+            </h2>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-slate-400 block mb-1">Server URL (včetně portu):</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="{{ base_url }}" id="xc-url" class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg font-mono text-slate-200" />
+                        <button onclick="copyToClipboard('xc-url')" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition" title="Kopírovat">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-slate-400 block mb-1">Uživatelské jméno (Username):</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="{{ sample_user }}" id="xc-user" class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg font-mono text-slate-200" />
+                        <button onclick="copyToClipboard('xc-user')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="Kopírovat">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-slate-400 block mb-1">Heslo (Password):</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="admin" id="xc-pass" class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg font-mono text-slate-200" />
+                        <button onclick="copyToClipboard('xc-pass')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="Kopírovat">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 text-[11px] text-slate-400">
+                <i class="fa-solid fa-circle-info text-blue-400 mr-1"></i> Heslo a uživatele můžete měnit nebo přidávat nové v záložce <strong>Správa uživatelů</strong>.
+            </div>
+        </div>
+
+        <!-- Karta 2: Přímý M3U playlist & EPG -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-2">
+                <i class="fa-solid fa-list-check"></i>
+                <span>Přímý M3U Playlist &amp; EPG</span>
+            </h2>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-slate-400 block mb-1">M3U Plus Playlist URL (kanály + VOD + Catchup):</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="{{ base_url }}/get.php?username={{ sample_user }}&password=admin&type=m3u_plus" id="m3u-url" class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg font-mono text-slate-200 text-[11px]" />
+                        <button onclick="copyToClipboard('m3u-url')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition" title="Kopírovat">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-slate-400 block mb-1">XMLTV EPG URL (programový průvodce):</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="{{ base_url }}/xmltv.php?username={{ sample_user }}&password=admin" id="epg-url" class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg font-mono text-slate-200 text-[11px]" />
+                        <button onclick="copyToClipboard('epg-url')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="Kopírovat">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 bg-emerald-950/20 rounded-xl border border-emerald-900/40 text-[11px] text-emerald-300">
+                <i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> M3U playlist obsahuje značky pro <strong>Catchup (zpětné přehrávání až 14 dní)</strong> a Kodi Adaptive streamování.
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Návody pro aplikace -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-book-open text-blue-500"></i>
+            <span>Návod k nastavení v oblíbených aplikacích</span>
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div class="bg-slate-950/60 border border-slate-800 p-4 rounded-xl space-y-2">
+                <h3 class="font-bold text-white text-sm flex items-center space-x-2">
+                    <span class="text-blue-400"><i class="fa-solid fa-tv"></i></span>
+                    <span>TiviMate (Android TV)</span>
+                </h3>
+                <ol class="list-decimal list-inside space-y-1 text-slate-400 leading-relaxed">
+                    <li>V TiviMate zvolte <strong>Přidat playlist</strong>.</li>
+                    <li>Vyberte typ <strong>Xtream Codes</strong>.</li>
+                    <li>Zadejte Server URL, Uživatelské jméno a Heslo z tabulky výše.</li>
+                    <li>Zaškrtněte zahrnutí VOD i TV archivu a potvrďte.</li>
+                </ol>
+            </div>
+
+            <div class="bg-slate-950/60 border border-slate-800 p-4 rounded-xl space-y-2">
+                <h3 class="font-bold text-white text-sm flex items-center space-x-2">
+                    <span class="text-purple-400"><i class="fa-solid fa-mobile-screen"></i></span>
+                    <span>IPTV Smarters Pro</span>
+                </h3>
+                <ol class="list-decimal list-inside space-y-1 text-slate-400 leading-relaxed">
+                    <li>Vyberte <strong>Login with Xtream Codes API</strong>.</li>
+                    <li>Zadejte libovolný název (např. <em>ČT iVysílání</em>).</li>
+                    <li>Vyplňte Username, Password a URL serveru.</li>
+                    <li>Aplikace automaticky načte Live TV, Filmy i Seriály.</li>
+                </ol>
+            </div>
+
+            <div class="bg-slate-950/60 border border-slate-800 p-4 rounded-xl space-y-2">
+                <h3 class="font-bold text-white text-sm flex items-center space-x-2">
+                    <span class="text-sky-400"><i class="fa-solid fa-cube"></i></span>
+                    <span>Kodi (PVR IPTV Simple)</span>
+                </h3>
+                <ol class="list-decimal list-inside space-y-1 text-slate-400 leading-relaxed">
+                    <li>Nainstalujte doplněk <strong>PVR IPTV Simple Client</strong>.</li>
+                    <li>V nastavení zadejte M3U URL z karty výše.</li>
+                    <li>V záložce EPG vložte odkaz na XMLTV URL.</li>
+                    <li>Podpora Widevine se díky <code>#KODIPROP</code> aktivuje automaticky.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function copyToClipboard(id) {
+        const input = document.getElementById(id);
+        input.select();
+        input.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(input.value);
+        alert('Zkopírováno do schránky!');
+    }
+</script>
+{% endblock %}
