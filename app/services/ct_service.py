@@ -459,7 +459,10 @@ class CTService:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     # Zkusíme vyhledat přes GraphQL, pokud slug nefungoval přímo
-                    search_res = await self.search_shows_graphql(slug, limit=1)
+                    clean_kw = re.sub(r'^\d+-?', '', slug).replace('-', ' ').strip() or slug
+                    search_res = await self.search_shows_graphql(clean_kw, limit=1)
+                    if not search_res and clean_kw != slug:
+                        search_res = await self.search_shows_graphql(slug, limit=1)
                     if search_res:
                         item = search_res[0]
                         full_slug = f"{item['id']}-{item['code']}"
