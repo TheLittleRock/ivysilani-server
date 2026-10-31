@@ -118,12 +118,15 @@ async def player_api(
         for s_id, ch_code in CHANNEL_STREAM_MAP.items():
             ch = LIVE_CHANNELS[ch_code]
             cat_id = "1" if ch["category"] == "Česká televize" else "2"
+            logo_url = ch["logo"]
+            if logo_url.startswith("/"):
+                logo_url = f"{base_url}{logo_url}"
             streams.append({
                 "num": ch["num"],
                 "name": ch["name"],
                 "stream_type": "live",
                 "stream_id": s_id,
-                "stream_icon": ch["logo"],
+                "stream_icon": logo_url,
                 "epg_channel_id": ch["epg_id"],
                 "added": str(now_ts),
                 "category_id": cat_id,
@@ -264,7 +267,7 @@ async def player_api(
 # --- Streamovací Endpointy ---
 
 @router.api_route("/live/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
-async def live_stream(username: str, password: str, stream_filename: str):
+async def live_stream(request: Request, username: str, password: str, stream_filename: str):
     check_auth(username, password)
     # Extrakce stream_id
     stream_id_str = stream_filename.split(".")[0]
@@ -277,11 +280,17 @@ async def live_stream(username: str, password: str, stream_filename: str):
     if not ch_code or ch_code not in LIVE_CHANNELS:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    stream_data = await ct_service.resolve_live_stream(ch_code)
-    if not stream_data or not stream_data.get("url"):
+    stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
+    if not stream_data or not (stream_data.get("hls_url") or stream_data.get("url")):
         raise HTTPException(status_code=503, detail="Unable to resolve live stream from ČT")
 
-    stream_url = stream_data["url"]
+    # Pokud klient žádá timeshift (catchup)
+    has_catchup = any(k in request.query_params for k in ["utc", "lutc", "timeshift", "start"])
+    if has_catchup and stream_data.get("timeshift_url"):
+        stream_url = stream_data["timeshift_url"]
+    else:
+        stream_url = stream_data.get("hls_url") or stream_data["url"]
+
     if settings.STREAM_MODE == "proxy":
         # Proxy mód
         client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
@@ -328,7 +337,11 @@ async def get_m3u(
     for s_id, ch_code in CHANNEL_STREAM_MAP.items():
         ch = LIVE_CHANNELS[ch_code]
         stream_url = f"{base_url}/live/{username}/{password}/{s_id}.m3u8"
-        lines.append(f'#EXTINF:-1 tvg-id="{ch["epg_id"]}" tvg-name="{ch["name"]}" tvg-logo="{ch["logo"]}" group-title="{ch["category"]}" catchup="default" catchup-days="14",{ch["name"]}')
+        logo_url = ch["logo"]
+        if logo_url.startswith("/"):
+            logo_url = f"{base_url}{logo_url}"
+        catchup_src = f"{base_url}/live/{username}/{password}/{s_id}.m3u8?utc=${{start}}&lutc=${{timestamp}}"
+        lines.append(f'#EXTINF:-1 tvg-id="{ch["epg_id"]}" tvg-name="{ch["name"]}" tvg-logo="{logo_url}" group-title="{ch["category"]}" catchup="default" catchup-days="14" catchup-source="{catchup_src}",{ch["name"]}')
         # Podpora pro Kodi inputstream
         lines.append('#KODIPROP:inputstream=inputstream.adaptive')
         lines.append('#KODIPROP:inputstream.adaptive.manifest_type=hls')

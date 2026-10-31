@@ -8,46 +8,54 @@
     <!-- Levý / Hlavní sloupec: Video Player -->
     <div class="lg:col-span-2 space-y-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-            <!-- Přehrávač kontejner -->
-            <div class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner">
-                <video id="ct-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline>
-                    <p class="vjs-no-js">Pro přehrávání videa prosím povolte JavaScript a použijte moderní webový prohlížeč.</p>
-                </video>
+            <!-- Přehrávač kontejner se Shaka Player UI -->
+            <div id="video-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner" data-shaka-player-container>
+                <video id="ct-video" class="w-full h-full" autoplay playsinline data-shaka-player></video>
             </div>
 
-            <!-- Informace o právě hrajícím kanálu -->
-            <div class="mt-4 flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <img id="player-channel-logo" src="https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct1.svg" class="h-8 object-contain" alt="Logo kanálu" />
+            <!-- Informace o právě hrajícím kanálu a aktuálním programu -->
+            <div class="mt-4 pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center space-x-3.5">
+                    <div class="w-12 h-10 bg-slate-950 rounded-lg flex items-center justify-center p-1.5 border border-slate-800 shrink-0">
+                        <img id="player-channel-logo" src="/static/logos/ct1.svg" class="max-h-full max-w-full object-contain" alt="Logo" />
+                    </div>
                     <div>
-                        <h2 id="player-channel-title" class="text-lg font-bold text-white">ČT1</h2>
-                        <p id="player-channel-desc" class="text-xs text-slate-400">Hlavní rodinný program České televize</p>
+                        <div class="flex items-center space-x-2">
+                            <h2 id="player-channel-title" class="text-lg font-bold text-white tracking-wide">ČT1</h2>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800 animate-pulse">
+                                <i class="fa-solid fa-circle text-[5px] mr-1"></i> ŽIVĚ
+                            </span>
+                            <span id="player-drm-badge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+                                <i class="fa-solid fa-lock text-[8px] mr-1"></i> Widevine DRM
+                            </span>
+                        </div>
+                        <p id="player-current-program" class="text-sm font-medium text-slate-200 mt-0.5">Načítám program...</p>
+                        <p id="player-channel-desc" class="text-xs text-slate-400 mt-0.5">Hlavní rodinný program České televize</p>
                     </div>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-950 text-red-400 border border-red-800 animate-pulse">
-                        <i class="fa-solid fa-circle text-[6px] mr-1.5"></i> ŽIVĚ
-                    </span>
-                    <button onclick="reloadCurrentStream()" class="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition" title="Znovu načíst stream">
+
+                <div class="flex items-center space-x-2 self-end sm:self-auto">
+                    <button onclick="reloadCurrentStream()" class="px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition flex items-center space-x-1.5 border border-slate-700/80 shadow" title="Znovu načíst stream">
                         <i class="fa-solid fa-rotate-right text-xs"></i>
+                        <span>Obnovit</span>
                     </button>
                 </div>
             </div>
         </div>
 
         <!-- Rychlý návod k IPTV -->
-        <div class="bg-blue-950/40 border border-blue-900/60 rounded-xl p-4 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-lg">
+        <div class="bg-gradient-to-r from-blue-950/40 to-slate-900 border border-blue-900/50 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+            <div class="flex items-center space-x-3.5">
+                <div class="w-10 h-10 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-lg shrink-0">
                     <i class="fa-solid fa-tv"></i>
                 </div>
                 <div>
-                    <h3 class="text-sm font-semibold text-white">Chcete sledovat ČT ve své televizi (TiviMate / IPTV Smarters)?</h3>
-                    <p class="text-xs text-slate-400">Využijte vygenerované Xtream Codes údaje nebo přímý M3U playlist.</p>
+                    <h3 class="text-sm font-semibold text-white">Sledujte ČT v IPTV aplikacích (TiviMate / IPTV Smarters / Kodi)</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Kompletní EPG, 14denní zpětné zhlédnutí (Catchup) i M3U playlist pro Smart TV.</p>
                 </div>
             </div>
-            <a href="/xtream" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">
-                Zobrazit nastavení
+            <a href="/xtream" class="whitespace-nowrap bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow">
+                Zobrazit přístupy
             </a>
         </div>
     </div>
@@ -55,27 +63,41 @@
     <!-- Pravý sloupec: Výběr kanálů -->
     <div class="space-y-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
-                <span>Kanály České televize</span>
-                <span class="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-normal">14 stanic</span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+                <span>Stanice České televize</span>
+                <span class="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-normal">14 kanálů</span>
             </h3>
 
-            <div class="space-y-2 max-h-[620px] overflow-y-auto pr-1">
+            <div class="space-y-2 max-h-[640px] overflow-y-auto pr-1 custom-scrollbar">
                 {% for ch in channels %}
-                <button onclick="playChannel('{{ ch.id }}', '{{ ch.name }}', '{{ ch.logo }}', '{{ ch.description }}')"
+                {% set epg = live_epg.get(ch.id, {}) %}
+                {% set current_prog = epg.get('current', {}) %}
+                <button onclick="playChannel('{{ ch.id }}', '{{ ch.name }}', '{{ ch.logo }}', '{{ ch.description }}', '{{ current_prog.get('title', '')|replace('\'', '\\\'') }}')"
                         id="btn-{{ ch.id }}"
-                        class="w-full text-left p-3 rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-800/60 transition flex items-center justify-between group channel-btn">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-10 h-8 bg-slate-950 rounded-lg flex items-center justify-center p-1 border border-slate-800">
+                        class="w-full text-left p-3 rounded-xl border border-slate-800/80 hover:border-blue-600/60 hover:bg-slate-800/60 transition flex items-center justify-between group channel-btn">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-10 h-8 bg-slate-950 rounded-lg flex items-center justify-center p-1 border border-slate-800 shrink-0">
                             <img src="{{ ch.logo }}" alt="{{ ch.name }}" class="max-h-full max-w-full object-contain" />
                         </div>
-                        <div>
-                            <div class="text-sm font-semibold text-white group-hover:text-blue-400 transition">{{ ch.name }}</div>
-                            <div class="text-[11px] text-slate-500 line-clamp-1">{{ ch.description }}</div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold text-white group-hover:text-blue-400 transition flex items-center space-x-1.5">
+                                <span>{{ ch.name }}</span>
+                                {% if ch.category == 'ČT sport Plus' %}
+                                <span class="text-[9px] bg-blue-950 text-blue-300 border border-blue-800/60 px-1 py-0.2 rounded font-normal">PLUS</span>
+                                {% endif %}
+                            </div>
+                            {% if current_prog.get('title') %}
+                            <div class="text-[11px] text-amber-300/90 font-medium truncate mt-0.5 flex items-center space-x-1">
+                                <i class="fa-solid fa-play text-[8px] text-amber-400 shrink-0"></i>
+                                <span class="truncate">{{ current_prog.title }}</span>
+                            </div>
+                            {% else %}
+                            <div class="text-[11px] text-slate-500 truncate mt-0.5">{{ ch.description }}</div>
+                            {% endif %}
                         </div>
                     </div>
-                    <span class="text-xs text-slate-600 group-hover:text-blue-400 transition">
-                        <i class="fa-solid fa-play text-xs"></i>
+                    <span class="text-xs text-slate-600 group-hover:text-blue-400 transition pl-2">
+                        <i class="fa-solid fa-chevron-right text-xs"></i>
                     </span>
                 </button>
                 {% endfor %}
@@ -89,29 +111,68 @@
 {% block extra_scripts %}
 <script>
     let player = null;
+    let ui = null;
     let currentChannelId = 'CH_1';
 
-    document.addEventListener('DOMContentLoaded', function () {
-        player = videojs('ct-player', {
-            autoplay: true,
-            muted: true,
-            fluid: true,
-            html5: {
-                vhs: {
-                    overrideNative: true
+    async function initShaka() {
+        shaka.polyfill.installAll();
+
+        if (!shaka.Player.isBrowserSupported()) {
+            console.error('Prohlížeč nepodporuje Shaka Player.');
+            return;
+        }
+
+        const video = document.getElementById('ct-video');
+        const container = document.getElementById('video-container');
+
+        player = new shaka.Player(video);
+        ui = new shaka.ui.Overlay(player, container, video);
+
+        // Nastavení licenčního serveru Widevine DRM pro Českou televizi
+        player.configure({
+            drm: {
+                servers: {
+                    'com.widevine.alpha': 'https://ivys-wvproxy.o2tv.cz/license?access_token=public'
                 }
+            },
+            streaming: {
+                bufferingGoal: 10,
+                rebufferingGoal: 2,
+                jumpLargeGaps: true
             }
         });
 
-        if (typeof player.eme === 'function') {
-            player.eme();
-        }
+        // Konfigurace ovládacího panelu s volbou kvality
+        ui.configure({
+            controlPanelElements: [
+                'play_pause',
+                'time_and_duration',
+                'spacer',
+                'mute',
+                'volume',
+                'quality',
+                'overflow_menu',
+                'fullscreen'
+            ],
+            overflowMenuButtons: [
+                'quality',
+                'language',
+                'playback_rate'
+            ]
+        });
 
-        // Spustit ČT1 jako výchozí
-        playChannel('CH_1', 'ČT1', 'https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct1.svg', 'Hlavní program České televize – rodinná televize, seriály, zábava, zprávy.');
+        // Automatické spuštění ČT1
+        playChannel('CH_1', 'ČT1', '/static/logos/ct1.svg', 'Hlavní rodinný program České televize', '');
+    }
+
+    document.addEventListener('shaka-ui-loaded', initShaka);
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!window.shaka) {
+            setTimeout(initShaka, 500);
+        }
     });
 
-    async function playChannel(channelId, name, logo, desc) {
+    async function playChannel(channelId, name, logo, desc, currentProg) {
         currentChannelId = channelId;
 
         // Aktualizovat aktivní tlačítko
@@ -127,6 +188,11 @@
         document.getElementById('player-channel-title').textContent = name;
         document.getElementById('player-channel-logo').src = logo;
         document.getElementById('player-channel-desc').textContent = desc;
+        if (currentProg) {
+            document.getElementById('player-current-program').textContent = 'Právě běží: ' + currentProg;
+        } else {
+            document.getElementById('player-current-program').textContent = 'Živé vysílání stanice ' + name;
+        }
 
         try {
             const resp = await fetch(`/api/stream/live/${channelId}`);
@@ -136,13 +202,36 @@
             }
             const data = await resp.json();
 
-            player.src({
-                src: data.url,
-                type: 'application/x-mpegURL'
-            });
-            player.play();
+            // Zobrazení DRM odznaku
+            const drmBadge = document.getElementById('player-drm-badge');
+            if (data.is_drm) {
+                drmBadge.classList.remove('hidden');
+            } else {
+                drmBadge.classList.add('hidden');
+            }
+
+            // Načtení streamu do Shaka Playeru (podporuje DASH Widevine MPD i HLS)
+            if (player) {
+                await player.load(data.url);
+                const video = document.getElementById('ct-video');
+                video.play().catch(e => {
+                    console.log('Autoplay muted requirement:', e);
+                    video.muted = true;
+                    video.play();
+                });
+            }
         } catch (e) {
-            console.error('Chyba přehrávače:', e);
+            console.error('Chyba přehrávače Shaka:', e);
+            // Fallback na nativní HLS přes video element pokud Shaka selže
+            try {
+                const resp = await fetch(`/api/stream/live/${channelId}`);
+                const data = await resp.json();
+                const video = document.getElementById('ct-video');
+                video.src = data.hls_url || data.url;
+                video.play();
+            } catch (err) {
+                console.error('Fallback failed:', err);
+            }
         }
     }
 

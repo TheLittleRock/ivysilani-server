@@ -6,21 +6,32 @@
 <div class="space-y-6">
 
     <!-- Horní lišta s vyhledáváním a filtrem žánrů -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h1 class="text-xl font-bold text-white flex items-center space-x-2">
                     <i class="fa-solid fa-film text-blue-500"></i>
-                    <span>Katalog a archiv pořadů</span>
+                    <span>Katalog a archiv iVysílání</span>
                 </h1>
-                <p class="text-xs text-slate-400 mt-0.5">Procházejte synchronizované pořady ČT nebo přidejte jakýkoliv pořad zadáním odkazu.</p>
+                <p class="text-xs text-slate-400 mt-0.5">
+                    Procházejte filmy, seriály a dokumenty České televize nebo přidejte jakýkoliv pořad.
+                    {% if total_shows is defined %}
+                    <span class="text-blue-400 font-semibold">(V databázi: {{ total_shows }} titulů)</span>
+                    {% endif %}
+                </p>
             </div>
 
             <!-- Tlačítko přidat pořad -->
-            <button onclick="document.getElementById('modal-add-show').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2 shadow-sm self-start md:self-auto">
-                <i class="fa-solid fa-plus"></i>
-                <span>Přidat pořad z iVysílání</span>
-            </button>
+            <div class="flex items-center space-x-2 self-start md:self-auto">
+                <a href="/admin" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3.5 py-2.5 rounded-xl transition flex items-center space-x-1.5 border border-slate-700">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>Správa indexace</span>
+                </a>
+                <button onclick="document.getElementById('modal-add-show').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Přidat pořad</span>
+                </button>
+            </div>
         </div>
 
         <!-- Formulář pro vyhledávání a žánry -->
@@ -30,7 +41,7 @@
                 <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500 text-sm">
                     <i class="fa-solid fa-magnifying-glass"></i>
                 </span>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Hledat v archivu pořadů..."
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Hledat pořad, seriál, film..."
                        class="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition" />
             </div>
 
@@ -49,6 +60,19 @@
                 Filtrovat
             </button>
         </form>
+
+        <!-- Rychlé filtry kategorií (pills) -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 custom-scrollbar text-xs">
+            <span class="text-slate-500 font-medium mr-1 shrink-0">Kategorie:</span>
+            <a href="/archive?genre=all" class="px-3 py-1 rounded-full transition shrink-0 {% if current_genre == 'all' %}bg-blue-600 text-white font-semibold{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+                Vše
+            </a>
+            {% for cat in ['Seriály', 'Filmy', 'Dokumenty', 'Zábava', 'Kultura', 'Historie', 'Pro děti', 'Zpravodajství', 'Příroda', 'Sport'] %}
+            <a href="/archive?genre={{ cat }}" class="px-3 py-1 rounded-full transition shrink-0 {% if current_genre == cat %}bg-blue-600 text-white font-semibold{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+                {{ cat }}
+            </a>
+            {% endfor %}
+        </div>
     </div>
 
     <!-- Výpis pořadů -->
@@ -103,15 +127,25 @@
     {% endif %}
 
     {% else %}
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
-        <div class="text-slate-600 text-5xl">
-            <i class="fa-solid fa-film"></i>
+    <!-- Prázdný stav -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center space-y-4 shadow-xl">
+        <div class="w-16 h-16 mx-auto rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-2xl">
+            <i class="fa-solid fa-magnifying-glass"></i>
         </div>
-        <h3 class="text-lg font-bold text-white">Nebyly nalezeny žádné pořady</h3>
-        <p class="text-xs text-slate-400 max-w-md mx-auto">Zkuste změnit vyhledávací dotaz, nebo vložte přímý odkaz na jakýkoliv pořad z iVysílání České televize.</p>
-        <button onclick="document.getElementById('modal-add-show').classList.remove('hidden')" class="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition inline-block">
-            Přidat pořad z webu iVysílání
-        </button>
+        <div class="space-y-1">
+            <h3 class="text-base font-bold text-white">Nenalezeny žádné pořady</h3>
+            <p class="text-xs text-slate-400 max-w-md mx-auto">
+                Pro zadaný filtr nebyly v lokální databázi nalezeny žádné položky. Můžete spustit indexaci celého katalogu iVysílání nebo přidat pořad ručně.
+            </p>
+        </div>
+        <div class="pt-2 flex justify-center space-x-3">
+            <a href="/archive" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition">
+                Zrušit filtry
+            </a>
+            <a href="/admin" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition">
+                Přejít do Administrace indexace
+            </a>
+        </div>
     </div>
     {% endif %}
 
@@ -119,29 +153,36 @@
 
 <!-- Modal: Přidat pořad z iVysílání -->
 <div id="modal-add-show" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
         <div class="flex items-center justify-between">
             <h3 class="text-base font-bold text-white flex items-center space-x-2">
-                <i class="fa-solid fa-cloud-arrow-down text-blue-500"></i>
-                <span>Přidat pořad do katalogu</span>
+                <i class="fa-solid fa-plus text-blue-500"></i>
+                <span>Přidat pořad z iVysílání</span>
             </h3>
             <button onclick="document.getElementById('modal-add-show').classList.add('hidden')" class="text-slate-500 hover:text-white transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <p class="text-xs text-slate-400">Vložte odkaz nebo slug pořadu ze stránek České televize (např. <code class="text-blue-400">https://www.ceskatelevize.cz/porady/1097181328-udalosti/</code> nebo jen <code class="text-blue-400">1097181328-udalosti</code>):</p>
+        <p class="text-xs text-slate-400 leading-relaxed">
+            Vložte celou URL adresu pořadu z webu České televize nebo jeho slug (např. <code>1097944695-vysehrad</code>). Server automaticky načte všechny dostupné díly.
+        </p>
 
-        <form id="form-index-show" onsubmit="submitIndexShow(event)" class="space-y-3">
-            <input type="text" id="input-show-url" required placeholder="https://www.ceskatelevize.cz/porady/..."
-                   class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition" />
-            <div id="index-msg" class="text-xs hidden"></div>
+        <form id="form-add-show" onsubmit="submitAddShow(event)" class="space-y-3 text-xs">
+            <div>
+                <label class="block text-slate-400 mb-1">Odkaz nebo slug pořadu:</label>
+                <input type="text" id="input-show-url" required placeholder="https://www.ceskatelevize.cz/porady/..."
+                       class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+            </div>
+
+            <div id="add-show-status" class="text-xs hidden py-1"></div>
+
             <div class="flex justify-end space-x-2 pt-2">
-                <button type="button" onclick="document.getElementById('modal-add-show').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition">
+                <button type="button" onclick="document.getElementById('modal-add-show').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl transition">
                     Zrušit
                 </button>
-                <button type="submit" id="btn-submit-index" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5">
-                    <span>Indexovat a uložit</span>
+                <button type="submit" id="btn-submit-show" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition">
+                    Stáhnout metadata
                 </button>
             </div>
         </form>
@@ -151,19 +192,23 @@
 
 {% block extra_scripts %}
 <script>
-    async function submitIndexShow(e) {
+    async function submitAddShow(e) {
         e.preventDefault();
-        const urlInput = document.getElementById('input-show-url');
-        const submitBtn = document.getElementById('btn-submit-index');
-        const msg = document.getElementById('index-msg');
+        const input = document.getElementById('input-show-url');
+        const status = document.getElementById('add-show-status');
+        const btn = document.getElementById('btn-submit-show');
+        const val = input.value.trim();
 
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Indexuji...';
-        msg.className = 'text-xs text-slate-400 block';
-        msg.textContent = 'Stahuji metadata pořadu z České televize...';
+        if (!val) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Stahuji...';
+        status.classList.remove('hidden');
+        status.textContent = 'Získávám metadata a seznam dílů z České televize...';
+        status.className = 'text-xs text-blue-400 py-1';
 
         const formData = new FormData();
-        formData.append('url', urlInput.value.trim());
+        formData.append('url', val);
 
         try {
             const resp = await fetch('/admin/index-show', {
@@ -172,22 +217,22 @@
             });
             const data = await resp.json();
             if (data.status === 'ok') {
-                msg.className = 'text-xs text-emerald-400 block';
-                msg.textContent = 'Pořad byl úspěšně přidán do katalogu! Obnovuji stránku...';
+                status.textContent = 'Pořad byl úspěšně doindexován! Stránka se obnoví...';
+                status.className = 'text-xs text-emerald-400 py-1';
                 setTimeout(() => {
                     window.location.reload();
                 }, 1000);
             } else {
-                msg.className = 'text-xs text-red-400 block';
-                msg.textContent = 'Chyba: Nepodařilo se načíst data pořadu. Zkontrolujte prosím zadaný odkaz.';
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Indexovat a uložit';
+                status.textContent = 'Pořad se nepodařilo nalézt nebo indexovat.';
+                status.className = 'text-xs text-red-400 py-1';
+                btn.disabled = false;
+                btn.textContent = 'Stáhnout metadata';
             }
         } catch (err) {
-            msg.className = 'text-xs text-red-400 block';
-            msg.textContent = 'Chyba spojení se serverem.';
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Indexovat a uložit';
+            status.textContent = 'Chyba při komunikaci se serverem.';
+            status.className = 'text-xs text-red-400 py-1';
+            btn.disabled = false;
+            btn.textContent = 'Stáhnout metadata';
         }
     }
 </script>

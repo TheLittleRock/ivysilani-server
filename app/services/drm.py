@@ -102,3 +102,9 @@ def media_name(template: str, representation: dict, number: int, segment_time: i
         value = int(values[name]) if format_spec else values[name]
         return format(value, format_spec.lstrip('%') or 's')
     return re.sub(r'\$([^\$]+)\$', replace, template)
+
+# Aliases used by drm_proxy.py
+_download = download_segment
+_media_name = media_name
+_duration = parse_duration
+_timestamp = parse_timestamp

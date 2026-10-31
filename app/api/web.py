@@ -26,10 +26,15 @@ def get_current_user(request: Request) -> Optional[dict]:
         return None
     return user
 
+def is_using_default_password(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+    return verify_password("admin", user.get("password_hash", ""))
+
 def require_admin(request: Request) -> dict:
     user = get_current_user(request)
     if not user or not user.get("is_admin"):
-        raise HTTPException(status_code=303, headers={"Location": "/login"})
+        raise HTTPException(status_code=303, headers={"Location": "/login?error=Vyžadováno+přihlášení+administrátora"})
     return user
 
 def get_base_url(request: Request) -> str:
@@ -42,10 +47,17 @@ def get_base_url(request: Request) -> str:
 @router.get("/", response_class=HTMLResponse)
 async def index_page(request: Request):
     user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     channels = list(LIVE_CHANNELS.values())
+    live_epg = await ct_service.get_live_epg_now()
+
     return templates.TemplateResponse(request=request, name="index.html", context={
         "user": user,
+        "is_default_password": is_using_default_password(user),
         "channels": channels,
+        "live_epg": live_epg,
         "active_tab": "live"
     })
 
@@ -57,6 +69,9 @@ async def archive_page(
     page: int = Query(1)
 ):
     user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     limit = 24
     offset = (page - 1) * limit
     shows = crud.list_shows(genre=genre, search=q, limit=limit, offset=offset)
@@ -66,18 +81,23 @@ async def archive_page(
 
     return templates.TemplateResponse(request=request, name="archive.html", context={
         "user": user,
+        "is_default_password": is_using_default_password(user),
         "shows": shows,
         "genres": genres,
         "current_genre": genre,
         "search_query": q or "",
         "page": page,
         "total_pages": total_pages,
+        "total_shows": total_shows,
         "active_tab": "archive"
     })
 
 @router.get("/show/{show_id}", response_class=HTMLResponse)
 async def show_detail_page(request: Request, show_id: str):
     user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     show = crud.get_show_by_id(show_id)
     if not show:
         # Zkusíme doindexovat on-demand
@@ -90,6 +110,7 @@ async def show_detail_page(request: Request, show_id: str):
     episodes = crud.get_episodes_by_show(show_id)
     return templates.TemplateResponse(request=request, name="show_detail.html", context={
         "user": user,
+        "is_default_password": is_using_default_password(user),
         "show": show,
         "episodes": episodes,
         "active_tab": "archive"
@@ -98,20 +119,30 @@ async def show_detail_page(request: Request, show_id: str):
 @router.get("/downloads", response_class=HTMLResponse)
 async def downloads_page(request: Request):
     user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     tasks = crud.list_download_tasks()
     return templates.TemplateResponse(request=request, name="downloads.html", context={
         "user": user,
+        "is_default_password": is_using_default_password(user),
         "tasks": tasks,
         "active_tab": "downloads"
     })
 
 @router.post("/api/downloads/add")
-async def add_download_api(idec: str = Form(...), title: str = Form(...)):
+async def add_download_api(request: Request, idec: str = Form(...), title: str = Form(...)):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nepřihlášen")
     task_id = await download_manager.add_download(idec, title)
     return {"status": "ok", "task_id": task_id}
 
 @router.delete("/api/downloads/{task_id}")
-async def delete_download_api(task_id: str):
+async def delete_download_api(request: Request, task_id: str):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nepřihlášen")
     task = crud.get_download_task(task_id)
     if task and task.get("filepath") and Path(task["filepath"]).exists():
         try:
@@ -123,7 +154,10 @@ async def delete_download_api(task_id: str):
     return {"status": "ok"}
 
 @router.get("/downloads/file/{task_id}")
-async def play_downloaded_file(task_id: str):
+async def play_downloaded_file(request: Request, task_id: str):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nepřihlášen")
     task = crud.get_download_task(task_id)
     if not task or not task.get("filepath") or not Path(task["filepath"]).exists():
         raise HTTPException(status_code=404, detail="Soubor nenalezen")
@@ -132,30 +166,106 @@ async def play_downloaded_file(task_id: str):
 @router.get("/xtream", response_class=HTMLResponse)
 async def xtream_page(request: Request):
     user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     base_url = get_base_url(request)
-    users = crud.list_users() if (user and user.get("is_admin")) else ([user] if user else [])
-    
+    users = crud.list_users() if user.get("is_admin") else [user]
     first_user = users[0] if users else None
     sample_user = first_user["username"] if first_user else "admin"
-    
+
     return templates.TemplateResponse(request=request, name="xtream.html", context={
         "user": user,
+        "is_default_password": is_using_default_password(user),
         "base_url": base_url,
         "sample_user": sample_user,
         "active_tab": "xtream"
     })
 
+@router.get("/stremio", response_class=HTMLResponse)
+async def stremio_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    base_url = get_base_url(request)
+    manifest_url = f"{base_url}/stremio/manifest.json"
+    stremio_link = f"stremio://{manifest_url.split('://')[-1]}"
+
+    return templates.TemplateResponse(request=request, name="stremio.html", context={
+        "user": user,
+        "is_default_password": is_using_default_password(user),
+        "base_url": base_url,
+        "manifest_url": manifest_url,
+        "stremio_link": stremio_link,
+        "active_tab": "stremio"
+    })
+
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
+async def admin_page(
+    request: Request,
+    error: Optional[str] = None,
+    success: Optional[str] = None
+):
     user = get_current_user(request)
     if not user or not user.get("is_admin"):
-        return RedirectResponse(url="/login?error=Vyžadováno přihlášení administrátora")
+        return RedirectResponse(url="/login?error=Vyžadováno+přihlášení+administrátora", status_code=303)
+
     users = crud.list_users()
+    crawler_stats = archive_crawler.stats
+    total_shows = crud.count_shows()
+
     return templates.TemplateResponse(request=request, name="admin.html", context={
         "user": user,
+        "is_default_password": is_using_default_password(user),
         "users": users,
+        "crawler_stats": crawler_stats,
+        "total_shows": total_shows,
+        "error": error,
+        "success": success,
         "active_tab": "admin"
     })
+
+@router.post("/admin/change-password")
+async def admin_change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...)
+):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    if not verify_password(current_password, user["password_hash"]):
+        return RedirectResponse(url="/admin?error=Současné+heslo+není+správné#change-password", status_code=303)
+
+    if new_password != confirm_password:
+        return RedirectResponse(url="/admin?error=Nová+hesla+se+neshodují#change-password", status_code=303)
+
+    if len(new_password) < 4:
+        return RedirectResponse(url="/admin?error=Nové+heslo+musí+mít+alespoň+4+znaky#change-password", status_code=303)
+
+    crud.update_user(user_id=user["id"], password=new_password)
+    return RedirectResponse(url="/admin?success=Heslo+bylo+úspěšně+změněno#change-password", status_code=303)
+
+@router.post("/admin/crawl-catalog")
+async def admin_crawl_catalog(request: Request):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
+    started = archive_crawler.start_background_crawl(max_pages_per_category=5)
+    return {"status": "started" if started else "already_running"}
+
+@router.get("/admin/crawl-status")
+async def admin_crawl_status(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nepřihlášen")
+    return {
+        **archive_crawler.stats,
+        "total_shows_in_db": crud.count_shows()
+    }
 
 @router.post("/admin/users/create")
 async def admin_create_user(
@@ -178,35 +288,48 @@ async def admin_delete_user(request: Request, user_id: int):
 @router.post("/admin/index-show")
 async def admin_index_show(request: Request, url: str = Form(...)):
     user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
     success = await archive_crawler.index_show(url)
     return {"status": "ok" if success else "error"}
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, error: Optional[str] = None):
+async def login_page(
+    request: Request,
+    error: Optional[str] = None,
+    next: Optional[str] = None
+):
+    user = get_current_user(request)
+    if user:
+        return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse(request=request, name="login.html", context={
-        "error": error
+        "error": error,
+        "next": next or "/"
     })
 
 @router.post("/login")
 async def login_post(
     request: Request,
     username: str = Form(...),
-    password: str = Form(...)
+    password: str = Form(...),
+    next: Optional[str] = Form("/")
 ):
     user = crud.authenticate_user(username, password)
     if not user:
         return templates.TemplateResponse(request=request, name="login.html", context={
-            "error": "Neplatné uživatelské jméno nebo heslo"
+            "error": "Neplatné uživatelské jméno nebo heslo",
+            "next": next or "/"
         }, status_code=401)
 
-    response = RedirectResponse(url="/", status_code=303)
+    redirect_url = next if (next and next.startswith("/") and not next.startswith("//")) else "/"
+    response = RedirectResponse(url=redirect_url, status_code=303)
     response.set_cookie(key="ivys_user", value=user["username"], max_age=86400 * 30, httponly=True)
     response.set_cookie(key="ivys_token", value="active", max_age=86400 * 30, httponly=True)
     return response
 
 @router.get("/logout")
 async def logout():
-    response = RedirectResponse(url="/", status_code=303)
+    response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie("ivys_user")
     response.delete_cookie("ivys_token")
     return response

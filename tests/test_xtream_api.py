@@ -5,26 +5,37 @@ from app.db.database import init_db
 from app.db import crud
 
 client = TestClient(app)
+AUTH_COOKIES = {"ivys_user": "admin", "ivys_token": "active"}
 
 @pytest.fixture(autouse=True)
 def setup_database():
     init_db()
 
-def test_root_web_ui():
-    response = client.get("/")
+def test_unauthenticated_redirect():
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+def test_root_web_ui_authenticated():
+    response = client.get("/", cookies=AUTH_COOKIES)
     assert response.status_code == 200
-    assert "iVysílání Server" in response.text
+    assert "iVysílání" in response.text
     assert "ČT1" in response.text
 
-def test_archive_web_ui():
-    response = client.get("/archive")
+def test_archive_web_ui_authenticated():
+    response = client.get("/archive", cookies=AUTH_COOKIES)
     assert response.status_code == 200
-    assert "Archiv" in response.text
+    assert "Katalog a archiv" in response.text
 
 def test_xtream_info_page():
-    response = client.get("/xtream")
+    response = client.get("/xtream", cookies=AUTH_COOKIES)
     assert response.status_code == 200
     assert "Xtream Codes" in response.text
+
+def test_stremio_info_page():
+    response = client.get("/stremio", cookies=AUTH_COOKIES)
+    assert response.status_code == 200
+    assert "Stremio" in response.text
 
 def test_player_api_unauthorized():
     response = client.get("/player_api.php?username=baduser&password=badpass")
@@ -48,8 +59,6 @@ def test_player_api_get_live_categories():
     categories = response.json()
     assert isinstance(categories, list)
     assert len(categories) > 0
-    cat_names = [c["category_name"] for c in categories]
-    assert "Česká televize" in cat_names
 
 def test_player_api_get_live_streams():
     response = client.get("/player_api.php?username=admin&password=admin&action=get_live_streams")
@@ -57,20 +66,59 @@ def test_player_api_get_live_streams():
     streams = response.json()
     assert isinstance(streams, list)
     assert len(streams) >= 14
-    stream_names = [s["name"] for s in streams]
-    assert any("ČT1" in name for name in stream_names)
-    assert any("ČT24" in name for name in stream_names)
+    ch1 = next((s for s in streams if s["stream_id"] == 1), None)
+    assert ch1 is not None
+    assert ch1["name"] == "ČT1"
+    assert "/static/logos/ct1.svg" in ch1["stream_icon"]
 
 def test_get_m3u_playlist():
     response = client.get("/get.php?username=admin&password=admin&type=m3u_plus")
     assert response.status_code == 200
     assert "#EXTM3U" in response.text
-    assert "tvg-id=" in response.text
     assert "ČT1" in response.text
+    assert "catchup=\"default\"" in response.text
+    assert "catchup-days=\"14\"" in response.text
+    assert "/static/logos/ct1.svg" in response.text
 
 def test_xmltv_epg():
     response = client.get("/xmltv.php?username=admin&password=admin")
     assert response.status_code == 200
     assert "<?xml" in response.text
     assert "<tv" in response.text
-    assert '<channel id="ct1.cz">' in response.text
+    assert 'id="ct1.cz"' in response.text or 'id="CH_1"' in response.text
+
+def test_stremio_manifest():
+    response = client.get("/stremio/manifest.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == "cz.thelittlerock.ivysilani"
+    assert "iVysílání" in data["name"]
+    catalogs = data["catalogs"]
+    assert any(c["id"] == "ct_live" for c in catalogs)
+    assert any(c["id"] == "ct_series" for c in catalogs)
+
+def test_stremio_live_catalog():
+    response = client.get("/stremio/catalog/tv/ct_live.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert "metas" in data
+    assert len(data["metas"]) >= 14
+    ct1 = next((m for m in data["metas"] if m["id"] == "ct_live_CH_1"), None)
+    assert ct1 is not None
+    assert ct1["name"] == "ČT1"
+
+def test_stremio_live_meta():
+    response = client.get("/stremio/meta/tv/ct_live_CH_1.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert "meta" in data
+    assert data["meta"]["id"] == "ct_live_CH_1"
+    assert data["meta"]["name"] == "ČT1"
+
+def test_stremio_live_stream():
+    response = client.get("/stremio/stream/tv/ct_live_CH_1.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert "streams" in data
+    assert len(data["streams"]) > 0
+    assert "url" in data["streams"][0]

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Stremio doplněk (Addon) - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+    <!-- Hlavní banner Stremio -->
+    <div class="relative overflow-hidden bg-gradient-to-br from-purple-950/70 via-slate-900 to-slate-950 border border-purple-900/60 rounded-3xl p-6 sm:p-10 shadow-2xl">
+        <div class="relative z-10 max-w-2xl space-y-4">
+            <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Oficiální Stremio v3 Addon API</span>
+            </div>
+            
+            <h1 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                Česká televize &amp; iVysílání přímo ve <span class="text-purple-400">Stremio</span>
+            </h1>
+            
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Integrujte kompletní nabídku iVysílání – 14 živých TV kanálů ČT v HD kvalitě i rozsáhlý archiv tisíců filmů, seriálů a dokumentů – do populární multiplatformní aplikace <strong>Stremio</strong> na Smart TV, mobilu i počítači.
+            </p>
+
+            <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <a href="{{ stremio_link }}" class="inline-flex items-center justify-center space-x-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm px-6 py-3.5 rounded-2xl shadow-xl shadow-purple-900/40 transition active:scale-95">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Nainstalovat do Stremio jedním klikem</span>
+                </a>
+                
+                <button onclick="copyManifestUrl()" class="inline-flex items-center justify-center space-x-2 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/80 font-semibold text-sm px-5 py-3.5 rounded-2xl transition">
+                    <i class="fa-regular fa-copy"></i>
+                    <span id="copy-btn-text">Kopírovat Manifest URL</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="absolute right-4 -bottom-10 opacity-10 sm:opacity-20 pointer-events-none text-purple-400 text-9xl">
+            <i class="fa-solid fa-tv"></i>
+        </div>
+    </div>
+
+    <!-- Adresa doplňku (Manifest URL) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Adresa manifestu doplňku (URL)</h3>
+        <div class="flex items-center space-x-2">
+            <input id="manifest-input" type="text" readonly value="{{ manifest_url }}"
+                   class="flex-grow px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs sm:text-sm text-purple-300 select-all focus:outline-none focus:border-purple-500" />
+            <button onclick="copyManifestUrl()" class="px-5 py-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shrink-0">
+                Kopírovat
+            </button>
+        </div>
+        <p class="text-[11px] text-slate-400">Tuto URL vložte do vyhledávacího pole ve Stremio (sekce <em>Addons &rarr; Community Addons</em>).</p>
+    </div>
+
+    <!-- Vlastnosti a kategorie -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-lg">
+            <div class="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-satellite-dish"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">14 živých stanic ČT</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+                ČT1, ČT2, ČT24, ČT sport, ČT :D, ČT art a všech 8 přenosů ČT sport Plus s logy a živými streamy.
+            </p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-lg">
+            <div class="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-film"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">Katalog pořadů a filmů</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+                Přejděte do sekce <em>Discover / Objevovat</em> ve Stremio – najdete zde přehledné kategorie: Seriály, Filmy, Dokumenty, Děti, Publicistika a další.
+            </p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-lg">
+            <div class="w-10 h-10 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">Multiplatformní</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+                Funguje na Windows, macOS, Linux, Android TV (Sony, Philips, TCL, Chromecast), Amazon Fire TV i mobilních zařízeních.
+            </p>
+        </div>
+    </div>
+
+    <!-- Návod k instalaci -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+        <h2 class="text-lg font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-book-open text-purple-400"></i>
+            <span>Návod k instalaci krok za krokem</span>
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+            <!-- Varianta 1: Desktop / Mobil -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+                <h4 class="font-bold text-sm text-purple-300 flex items-center space-x-2">
+                    <i class="fa-solid fa-desktop"></i>
+                    <span>Na počítači (Windows, Mac, Linux) nebo telefonu</span>
+                </h4>
+                <ol class="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
+                    <li>Nainstalujte si oficiální aplikaci <strong>Stremio</strong> z webu <a href="https://www.stremio.com" target="_blank" class="text-purple-400 underline">stremio.com</a>.</li>
+                    <li>Klikněte nahoře na fialové tlačítko <strong>"Nainstalovat do Stremio jedním klikem"</strong>.</li>
+                    <li>Prohlížeč otevře Stremio s dotazem na instalaci doplňku <strong>iVysílání Česká televize</strong>.</li>
+                    <li>Klikněte na <strong>Install</strong>. Od této chvíle uvidíte v záložkách <em>Discover</em> kanály a archiv ČT.</li>
+                </ol>
+            </div>
+
+            <!-- Varianta 2: Smart TV / Android TV -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+                <h4 class="font-bold text-sm text-purple-300 flex items-center space-x-2">
+                    <i class="fa-solid fa-tv"></i>
+                    <span>Na Android TV / Google TV / Chromecast</span>
+                </h4>
+                <ol class="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
+                    <li>Nainstalujte a přihlaste se do Stremio na Smart TV stejným účtem jako v mobilu či počítači.</li>
+                    <li>Pokud jste addon nainstalovali na PC či mobilu, <strong>automaticky se synchronizuje</strong> i do vaší TV!</li>
+                    <li>Alternativně v TV v aplikaci Stremio přejděte do sekce <strong>Addons</strong> &rarr; vyhledávací pole a zadejte adresu z rámečku nahoře.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function copyManifestUrl() {
+        const input = document.getElementById('manifest-input');
+        input.select();
+        navigator.clipboard.writeText(input.value).then(() => {
+            const btn = document.getElementById('copy-btn-text');
+            const original = btn.textContent;
+            btn.textContent = 'Zkopírováno!';
+            setTimeout(() => {
+                btn.textContent = original;
+            }, 2000);
+        });
+    }
+</script>
+{% endblock %}

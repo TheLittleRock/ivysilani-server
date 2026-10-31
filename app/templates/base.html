@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}iVysílání Server{% endblock %}</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -23,22 +25,32 @@
             }
         }
     </script>
-    <!-- Video.js -->
+    <!-- Shaka Player UI (DASH Widevine DRM + HLS + Quality Selection) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css" />
+    <!-- Video.js Fallback -->
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
-    <!-- Video.js Contrib EME pro DRM -->
-    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-eme@5.3.0/dist/videojs-contrib-eme.min.js"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <style>
-        .video-js {
+        .video-container {
+            position: relative;
             width: 100%;
             height: 100%;
             border-radius: 0.75rem;
             overflow: hidden;
+            background-color: #000;
         }
-        .vjs-theme-forest {
-            --vjs-theme-forest--primary: #3b82f6;
+        .shaka-video-container {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.75rem;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
     </style>
     {% block extra_head %}{% endblock %}
@@ -50,7 +62,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <a href="/" class="flex items-center space-x-2 text-xl font-bold tracking-tight text-white hover:text-blue-400 transition">
-                    <span class="bg-blue-600 text-white px-2.5 py-1 rounded-lg text-sm font-black tracking-wider uppercase shadow-md shadow-blue-500/20">ČT</span>
+                    <img src="/static/favicon.svg" alt="ČT" class="w-7 h-5" />
                     <span>iVysílání <span class="text-blue-500 text-sm font-semibold">Server</span></span>
                 </a>
             </div>
@@ -73,10 +85,14 @@
                     <i class="fa-solid fa-tv text-xs"></i>
                     <span>Xtream Codes & M3U</span>
                 </a>
+                <a href="/stremio" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'stremio' %}bg-purple-600 text-white{% else %}text-purple-300 hover:bg-purple-950/50 hover:text-purple-200{% endif %}">
+                    <i class="fa-solid fa-play text-xs"></i>
+                    <span>Stremio</span>
+                </a>
                 {% if user and user.is_admin %}
                 <a href="/admin" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'admin' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-users-gear text-xs"></i>
-                    <span>Správa uživatelů</span>
+                    <span>Administrace</span>
                 </a>
                 {% endif %}
             </nav>
@@ -101,6 +117,24 @@
 
     <!-- Hlavní obsah -->
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% if is_default_password %}
+        <!-- Upozornění na výchozí heslo administrátora -->
+        <div class="bg-amber-500/20 border border-amber-500/50 text-amber-200 px-5 py-4 rounded-xl mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <div class="flex items-center space-x-3.5">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/30 flex items-center justify-center shrink-0">
+                    <i class="fas fa-shield-halved text-2xl text-amber-400"></i>
+                </div>
+                <div>
+                    <p class="font-bold text-white text-sm">Bezpečnostní upozornění: Používáte výchozí heslo administrátora!</p>
+                    <p class="text-xs text-amber-200/90 mt-0.5">Výchozí heslo <code class="bg-black/40 px-1.5 py-0.5 rounded text-amber-300 font-mono">admin</code> / <code class="bg-black/40 px-1.5 py-0.5 rounded text-amber-300 font-mono">admin</code> je veřejně známé. Prosím změňte si ho v nastavení.</p>
+                </div>
+            </div>
+            <a href="/admin#change-password" class="whitespace-nowrap bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase px-4 py-2.5 rounded-lg transition shadow-md">
+                Změnit heslo
+            </a>
+        </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 

@@ -18,6 +18,5 @@ async def test_resolve_live_stream():
     assert stream_info is not None
     assert "url" in stream_info
     assert stream_info["url"].startswith("http")
-    assert "streamType=hls" in stream_info["url"] or "m3u8" in stream_info["url"]
+    assert "streamType=" in stream_info["url"] or "m3u8" in stream_info["url"] or "mpd" in stream_info["url"]
     assert stream_info["channel_id"] == "CH_24"
-    assert stream_info["is_drm"] is False

@@ -16,20 +16,26 @@
   - Procházení pořadů podle žánrů, vyhledávání v archivu ČT
   - On-demand indexace i automatický crawler na pozadí
   - Podpora přímého přidání libovolného pořadu zadáním URL nebo IDEC kódu
-- **Špičkové přehrávání:**
-  - Moderní Web UI s Video.js přehrávačem přizpůsobeným pro tmavý režim (Tailwind CSS)
-  - Podpora nechráněných HLS streamů i obsahu chráněného DRM Widevine
-  - Přizpůsobený manifest proxy a pure-Python MP4 box parser pro Widevine PSSH/KID podle originální logiky
-- **Xtream Codes IPTV API & M3U / EPG:**
+- **Špičkové přehrávání a volba kvality:**
+  - Moderní Web UI se **Shaka Player UI v4.7** a ovládací lištou s ozubeným kolečkem pro volbu rozlišení (1080p, 720p, 576p, 404p, automaticky)
+  - Podpora nechráněných HLS streamů i obsahu chráněného DRM Widevine (DASH MPD s adaptivní licencí ČT)
+  - Lokálně hostovaná oficiální vektorová loga stanic (SVG) a webová favicona odolná proti anti-hotlinking blokaci
+  - Živý přehled aktuálně a následně vysílaných pořadů přes GraphQL API České televize
+- **Stremio Addon API (v3):**
+  - Integrovaný Stremio manifest a API endpointy (`/stremio/manifest.json`, `/stremio/catalog/...`, `/stremio/meta/...`, `/stremio/stream/...`)
+  - Instalace do Stremio na 1 kliknutí (`stremio://`) na PC, Android TV, mobilu i webu
+  - Přehledné kategorie (Živé vysílání, Seriály, Filmy, Dokumenty, Pro děti)
+- **Xtream Codes IPTV API & M3U / EPG s 14denním Catchupem:**
   - Plnohodnotná podpora Xtream Codes API (`/player_api.php`) pro Live TV i VOD / Series
-  - Generování M3U playlistu (`/get.php`) s logy a kategoriemi
-  - Automatické generování XMLTV EPG (`/xmltv.php`) s podporou Catchup (zpětného zhlédnutí)
-- **Správce stahování:**
+  - Generování M3U playlistu (`/get.php`) s logy, skupinami a 14denním zpětným zhlédnutím (`catchup="default" catchup-days="14"`)
+  - Automatické generování XMLTV EPG (`/xmltv.php`) s detailními časovými údaji a popisy pořadů
+- **Správce stahování a plná indexace archivu:**
+  - Hloubkový crawler 14 kategorií archivu iVysílání na pozadí s možností okamžitého spuštění z administrace
   - Vestavěné asynchronní stahování pořadů z iVysílání do souborů MP4 pomocí `ffmpeg`
-  - Živý ukazatel procentuálního průběhu stahování a přímé přehrávání/stažení z disku
 - **Správa uživatelů a zabezpečení:**
   - Multi-uživatelská správa v SQLite (přihlašovací jména, bcrypt hesla, expirace účtů, limity souběžných spojení)
-  - Administrační rozhraní s ochranou cookie sessions
+  - Povinná autentizace na všech webových stránkách (přesměrování na `/login`)
+  - Výrazné bezpečnostní upozornění při ponechání výchozího hesla `admin/admin` a formulář pro okamžitou změnu hesla
 - **Snadné nasazení:**
   - Připravený `Dockerfile` pro multi-arch (AMD64 i ARM64 např. Raspberry Pi)
   - `docker-compose.yml` připravený pro Portainer Stack i standardní Docker
@@ -196,6 +202,12 @@ Propojení s přehrávači je mimořádně jednoduché. Podporovány jsou všech
 ### 4. VLC Media Player
 - Otevřete VLC -> **Média** -> **Otevřít síťový proud** (Ctrl+N).
 - Vložte odkaz na M3U playlist: `http://<IP-serveru>:5002/get.php?username=admin&password=admin&type=m3u_plus`
+
+### 5. Stremio (Multiplatformní Smart TV, PC i Mobil) 🎬
+1. Otevřete webové rozhraní iVysílání serveru a přejděte na záložku **Stremio**.
+2. Klikněte na **"Nainstalovat do Stremio jedním klikem"** (přímý protokol `stremio://<domena>/stremio/manifest.json`).
+3. Ve Stremio klikněte na **Install**.
+4. Pokud používáte Stremio na Android TV / Google TV, přihlaste se stejným účtem – doplněk se automaticky synchronizuje do vaší televize! V sekci *Objevovat (Discover)* najdete jak živé stanice ČT, tak rozsáhlý archiv iVysílání rozdělený do kategorií.
 
 ---
 

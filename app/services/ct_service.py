@@ -17,7 +17,7 @@ LIVE_CHANNELS = {
         "name": "ČT1",
         "num": 1,
         "category": "Česká televize",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct1.svg",
+        "logo": "/static/logos/ct1.svg",
         "epg_id": "ct1.cz",
         "description": "Hlavní program České televize – rodinná televize, seriály, zábava, zprávy."
     },
@@ -26,7 +26,7 @@ LIVE_CHANNELS = {
         "name": "ČT2",
         "num": 2,
         "category": "Česká televize",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct2.svg",
+        "logo": "/static/logos/ct2.svg",
         "epg_id": "ct2.cz",
         "description": "Dokumenty, příroda, historie, kvalitní filmová tvorba a publicistika."
     },
@@ -35,7 +35,7 @@ LIVE_CHANNELS = {
         "name": "ČT24",
         "num": 3,
         "category": "Česká televize",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct24.svg",
+        "logo": "/static/logos/ct24.svg",
         "epg_id": "ct24.cz",
         "description": "Nepřetržité 24hodinové zpravodajství a aktuální publicistika."
     },
@@ -44,7 +44,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport",
         "num": 4,
         "category": "Česká televize",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport.svg",
+        "logo": "/static/logos/ctsport.svg",
         "epg_id": "ctsport.cz",
         "description": "Český a mezinárodní sport, přímé přenosy a sportovní magazíny."
     },
@@ -53,7 +53,7 @@ LIVE_CHANNELS = {
         "name": "ČT :D",
         "num": 5,
         "category": "Česká televize",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-d.svg",
+        "logo": "/static/logos/ctd.svg",
         "epg_id": "ctd.cz",
         "description": "Dětský kanál Déčko pro děti od 4 do 12 let. Pohádky, vzdělávání a animované filmy."
     },
@@ -62,7 +62,7 @@ LIVE_CHANNELS = {
         "name": "ČT art",
         "num": 6,
         "category": "Česká televize",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-art.svg",
+        "logo": "/static/logos/ctart.svg",
         "epg_id": "ctart.cz",
         "description": "Kulturní a umělecký kanál ČT – divadlo, hudba, výtvarné umění a filmy."
     },
@@ -71,7 +71,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 1",
         "num": 25,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus1.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 1."
     },
@@ -80,7 +80,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 2",
         "num": 26,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus2.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 2."
     },
@@ -89,7 +89,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 3",
         "num": 27,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus3.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 3."
     },
@@ -98,7 +98,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 4",
         "num": 28,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus4.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 4."
     },
@@ -107,7 +107,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 5",
         "num": 29,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus5.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 5."
     },
@@ -116,7 +116,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 6",
         "num": 30,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus6.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 6."
     },
@@ -125,7 +125,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 7",
         "num": 31,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus7.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 7."
     },
@@ -134,7 +134,7 @@ LIVE_CHANNELS = {
         "name": "ČT sport Plus 8",
         "num": 32,
         "category": "ČT sport Plus",
-        "logo": "https://ctfs.ceskatelevize.cz/static/assets/img/channels/ct-sport-plus.svg",
+        "logo": "/static/logos/ctsportplus.svg",
         "epg_id": "ctsportplus8.cz",
         "description": "Internetový sportovní přenos ČT sport Plus 8."
     }
@@ -156,39 +156,50 @@ class CTService:
     def get_channel(self, channel_id: str) -> Optional[Dict[str, Any]]:
         return LIVE_CHANNELS.get(channel_id.upper())
 
-    async def resolve_live_stream(self, channel_id: str) -> Optional[Dict[str, Any]]:
-        """Získá přímou HLS URL živého vysílání."""
+    async def resolve_live_stream(self, channel_id: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
+        """Získá přímou stream URL pro živé vysílání (DASH s Widevine DRM a HLS)."""
         ch_key = channel_id.upper()
         if ch_key not in LIVE_CHANNELS:
             return None
 
-        # Kontrola cache (stream URL je platná cca 1 hodinu, my cachujeme 30 minut)
         cached = self._cache.get(f"live_{ch_key}")
         if cached and cached["expiry"] > time.time():
             return cached["data"]
 
-        url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{ch_key}?canPlayDrm=false&quality=web&streamType=hls"
+        hls_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{ch_key}?canPlayDrm=false&quality=web&streamType=hls"
+        dash_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{ch_key}?canPlayDrm=true&quality=web&streamType=dash"
+
         try:
             async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    logger.error(f"Live stream request for {ch_key} failed: {resp.status_code} - {resp.text}")
+                # Paralelní nebo sekvenční dotaz na HLS a DASH
+                hls_resp = await client.get(hls_url)
+                dash_resp = await client.get(dash_url)
+
+                hls_data = hls_resp.json() if hls_resp.status_code == 200 else {}
+                dash_data = dash_resp.json() if dash_resp.status_code == 200 else {}
+
+                hls_main = hls_data.get("streamUrls", {}).get("main")
+                timeshift_url = hls_data.get("streamUrls", {}).get("timeshift")
+                dash_main = dash_data.get("streamUrls", {}).get("main")
+
+                if not hls_main and not dash_main:
                     return None
-                data = resp.json()
-                stream_urls = data.get("streamUrls", {})
-                main_url = stream_urls.get("main")
-                if not main_url:
-                    return None
+
+                is_drm = False
+                if dash_main and ("drmOnly=true" in dash_main or dash_data.get("streamUrls", {}).get("encryption") == "wv"):
+                    is_drm = True
 
                 result = {
                     "channel_id": ch_key,
-                    "title": data.get("title", LIVE_CHANNELS[ch_key]["name"]),
-                    "url": main_url,
-                    "timeshift_url": stream_urls.get("timeshift"),
-                    "is_drm": False,
-                    "manifest_type": "hls",
-                    "qualities": data.get("availableQualities", []),
-                    "audio_tracks": data.get("audioTracks", [])
+                    "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS[ch_key]["name"],
+                    "url": dash_main if (allow_drm and dash_main) else (hls_main or dash_main),
+                    "hls_url": hls_main,
+                    "dash_url": dash_main,
+                    "timeshift_url": timeshift_url,
+                    "is_drm": is_drm,
+                    "manifest_type": "mpd" if (allow_drm and dash_main) else "hls",
+                    "qualities": dash_data.get("availableQualities") or hls_data.get("availableQualities", []),
+                    "audio_tracks": dash_data.get("audioTracks") or hls_data.get("audioTracks", [])
                 }
                 self._cache[f"live_{ch_key}"] = {
                     "data": result,
@@ -198,6 +209,61 @@ class CTService:
         except Exception as e:
             logger.error(f"Error resolving live stream for {ch_key}: {e}")
             return None
+
+    async def get_live_epg_now(self) -> Dict[str, Dict[str, Any]]:
+        """Vrátí aktuální a následující pořad pro všechny živé stanice z ČT GraphQL."""
+        cached = self._cache.get("live_epg_now")
+        if cached and cached["expiry"] > time.time():
+            return cached["data"]
+
+        url = "https://api.ceskatelevize.cz/graphql/"
+        params = {"client": "iVysilaniWeb", "version": "1.131.1", "use-new-playability": "true"}
+        query = """
+        query LiveBroadcastFind {
+          liveBroadcastFind {
+            id
+            slug
+            current {
+              id
+              idec
+              title
+              description
+              startsAt
+              endsAt
+            }
+            next {
+              id
+              idec
+              title
+              description
+              startsAt
+              endsAt
+            }
+          }
+        }
+        """
+        result = {}
+        try:
+            async with httpx.AsyncClient(headers=self._headers, timeout=5.0) as client:
+                r = await client.post(url, params=params, json={"operationName": "LiveBroadcastFind", "variables": {}, "query": query})
+                if r.status_code == 200:
+                    data = r.json()
+                    items = data.get("data", {}).get("liveBroadcastFind", [])
+                    for it in items:
+                        ch_id = it.get("id")
+                        if ch_id:
+                            result[ch_id] = {
+                                "current": it.get("current") or {},
+                                "next": it.get("next") or {}
+                            }
+        except Exception as e:
+            logger.warning(f"Error fetching live EPG from ČT: {e}")
+
+        self._cache["live_epg_now"] = {
+            "data": result,
+            "expiry": time.time() + 60  # Cache 1 minutu
+        }
+        return result
 
     async def resolve_vod_stream(self, idec: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
         """Získá stream pro daný IDEC pořadu. Nejprve zkusí HLS bez DRM."""

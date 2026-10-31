@@ -10,9 +10,11 @@ from app.core.config import settings
 from app.db.database import init_db
 from app.services.downloader import download_manager
 from app.services.archive_crawler import archive_crawler
+from app.services.epg_service import update_external_epg
 from app.api.web import router as web_router
 from app.api.xtream import router as xtream_router
 from app.api.stream import router as stream_router
+from app.api.stremio import router as stremio_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,10 +33,14 @@ async def lifespan(app: FastAPI):
     logger.info("Spouštění indexeru archivu na pozadí...")
     crawler_task = asyncio.create_task(archive_crawler.run_periodic_crawler())
     
+    logger.info("Spouštění stahování EPG dat na pozadí...")
+    epg_task = asyncio.create_task(update_external_epg())
+    
     yield
     
     logger.info("Ukončování služeb...")
     crawler_task.cancel()
+    epg_task.cancel()
     await download_manager.stop()
 
 app = FastAPI(
@@ -61,6 +67,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Registrace routerů
 app.include_router(stream_router)
 app.include_router(xtream_router)
+app.include_router(stremio_router)
 app.include_router(web_router)
 
 if __name__ == "__main__":

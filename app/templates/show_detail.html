@@ -13,19 +13,17 @@
         </a>
     </div>
 
-    <!-- Přehrávač (pokud je spuštěno video) -->
-    <div id="player-container" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hidden">
-        <div class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner">
-            <video id="vod-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline>
-                <p class="vjs-no-js">Přehrávač vyžaduje povolený JavaScript.</p>
-            </video>
+    <!-- Přehrávač Shaka Player UI (pokud je spuštěno video) -->
+    <div id="player-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hidden">
+        <div id="vod-player-container" class="aspect-video w-full bg-black rounded-xl overflow-hidden relative shadow-inner" data-shaka-player-container>
+            <video id="vod-video" class="w-full h-full" playsinline data-shaka-player></video>
         </div>
-        <div class="mt-3 flex items-center justify-between">
+        <div class="mt-3 pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
                 <h3 id="current-playing-title" class="text-base font-bold text-white"></h3>
-                <p id="current-playing-drm" class="text-xs text-slate-400"></p>
+                <div id="current-playing-status" class="text-xs text-slate-400 mt-0.5 flex items-center space-x-2"></div>
             </div>
-            <button onclick="stopVodPlayer()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition">
+            <button onclick="stopVodPlayer()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition self-end sm:self-auto">
                 Zavřít přehrávač
             </button>
         </div>
@@ -58,7 +56,7 @@
                 </span>
                 {% endif %}
                 <span class="text-xs text-slate-500">
-                    Celkem epizod: {{ episodes|length }}
+                    Celkem dílů: {{ episodes|length }}
                 </span>
             </div>
 
@@ -67,7 +65,7 @@
 
             {% if episodes %}
             <div class="pt-2">
-                <button onclick="playEpisode('{{ episodes[0].idec }}', '{{ episodes[0].title }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition inline-flex items-center space-x-2 shadow-lg shadow-blue-600/20">
+                <button onclick="playEpisode('{{ episodes[0].idec }}', '{{ episodes[0].title|replace('\'', '\\\'') }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition inline-flex items-center space-x-2 shadow-lg shadow-blue-600/20">
                     <i class="fa-solid fa-play"></i>
                     <span>Přehrát nejnovější díl</span>
                 </button>
@@ -88,7 +86,7 @@
             {% for ep in episodes %}
             <div class="bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 rounded-xl p-4 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div class="flex items-center space-x-3.5">
-                    <div class="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 text-blue-400 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                    <div class="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 text-blue-400 flex items-center justify-center font-bold text-sm shrink-0">
                         {{ ep.episode_num or loop.index }}
                     </div>
                     <div>
@@ -102,11 +100,11 @@
 
                 <!-- Tlačítka přehrát / stáhnout -->
                 <div class="flex items-center space-x-2 self-end sm:self-auto">
-                    <button onclick="playEpisode('{{ ep.idec }}', '{{ ep.title }}')" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5">
+                    <button onclick="playEpisode('{{ ep.idec }}', '{{ ep.title|replace('\'', '\\\'') }}')" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 shadow">
                         <i class="fa-solid fa-play text-[10px]"></i>
                         <span>Přehrát</span>
                     </button>
-                    <button onclick="downloadEpisode('{{ ep.idec }}', '{{ show.title }} - {{ ep.title }}')" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5" title="Stáhnout na disk serveru">
+                    <button onclick="downloadEpisode('{{ ep.idec }}', '{{ show.title|replace('\'', '\\\'') }} - {{ ep.title|replace('\'', '\\\'') }}')" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5" title="Stáhnout na disk serveru">
                         <i class="fa-solid fa-download text-[10px]"></i>
                         <span>Stáhnout</span>
                     </button>
@@ -124,69 +122,100 @@
 
 {% block extra_scripts %}
 <script>
-    let vodPlayer = null;
+    let player = null;
+    let ui = null;
 
-    document.addEventListener('DOMContentLoaded', function() {
-        vodPlayer = videojs('vod-player', {
-            controls: true,
-            fluid: true,
-            html5: {
-                vhs: {
-                    overrideNative: true
-                }
-            }
-        });
-        if (typeof vodPlayer.eme === 'function') {
-            vodPlayer.eme();
+    async function initShakaVod() {
+        shaka.polyfill.installAll();
+
+        if (!shaka.Player.isBrowserSupported()) {
+            console.error('Shaka Player není v tomto prohlížeči podporován');
+            return;
         }
-    });
+
+        const video = document.getElementById('vod-video');
+        const container = document.getElementById('vod-player-container');
+        player = new shaka.Player(video);
+        ui = new shaka.ui.Overlay(player, container, video);
+
+        ui.configure({
+            controlPanelElements: [
+                'play_pause',
+                'time_and_duration',
+                'spacer',
+                'mute',
+                'volume',
+                'quality',
+                'captions',
+                'fullscreen',
+                'overflow_menu'
+            ]
+        });
+
+        player.addEventListener('error', (event) => {
+            console.error('Chyba Shaka přehrávače:', event.detail);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', initShakaVod);
 
     async function playEpisode(idec, title) {
-        const container = document.getElementById('player-container');
-        container.classList.remove('hidden');
+        const card = document.getElementById('player-card');
+        card.classList.remove('hidden');
         document.getElementById('current-playing-title').textContent = title;
-        document.getElementById('current-playing-drm').textContent = 'Načítám stream z ČT CDN...';
+        const statusEl = document.getElementById('current-playing-status');
+        statusEl.innerHTML = '<span class="text-blue-400"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Načítám stream z ČT CDN...</span>';
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        if (!player) {
+            await initShakaVod();
+        }
 
         try {
             const resp = await fetch(`/api/stream/vod/${idec}`);
             if (!resp.ok) {
-                alert('Chyba: Stream pro tento díl se nepodařilo načíst.');
+                statusEl.innerHTML = '<span class="text-red-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Stream se nepodařilo načíst z ČT.</span>';
                 return;
             }
             const data = await resp.json();
 
             if (data.is_drm) {
-                document.getElementById('current-playing-drm').innerHTML = '<span class="text-amber-400"><i class="fa-solid fa-lock"></i> Widevine DRM stream (přehrává se přes adaptér ČT)</span>';
-                vodPlayer.src({
-                    src: data.url,
-                    type: 'application/dash+xml',
-                    keySystems: {
-                        'com.widevine.alpha': {
-                            url: data.license_url
+                statusEl.innerHTML = '<span class="text-amber-400"><i class="fa-solid fa-lock mr-1"></i> Widevine DRM stream (DASH MPD)</span>';
+                player.configure({
+                    drm: {
+                        servers: {
+                            'com.widevine.alpha': data.license_url || 'https://ivys-wvproxy.o2tv.cz/license?access_token=public'
                         }
                     }
                 });
             } else {
-                document.getElementById('current-playing-drm').innerHTML = '<span class="text-emerald-400"><i class="fa-solid fa-unlock"></i> Volný HLS stream bez DRM</span>';
-                vodPlayer.src({
-                    src: data.url,
-                    type: 'application/x-mpegURL'
+                statusEl.innerHTML = '<span class="text-emerald-400"><i class="fa-solid fa-unlock mr-1"></i> Volný HLS stream bez DRM</span>';
+                player.configure({
+                    drm: {
+                        servers: {}
+                    }
                 });
             }
-            vodPlayer.play();
+
+            await player.load(data.url);
+            const video = document.getElementById('vod-video');
+            video.play();
         } catch (e) {
-            console.error('Chyba přehrávače:', e);
-            alert('Chyba při přehrávání streamu.');
+            console.error('Chyba při přehrávání dílu:', e);
+            statusEl.innerHTML = '<span class="text-red-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Chyba při spouštění přehrávání.</span>';
         }
     }
 
     function stopVodPlayer() {
-        if (vodPlayer) {
-            vodPlayer.pause();
+        const video = document.getElementById('vod-video');
+        if (video) {
+            video.pause();
         }
-        document.getElementById('player-container').classList.add('hidden');
+        if (player) {
+            player.unload();
+        }
+        document.getElementById('player-card').classList.add('hidden');
     }
 
     async function downloadEpisode(idec, title) {
