@@ -263,7 +263,7 @@ async def player_api(
 
 # --- Streamovací Endpointy ---
 
-@router.get("/live/{username}/{password}/{stream_filename}")
+@router.api_route("/live/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
 async def live_stream(username: str, password: str, stream_filename: str):
     check_auth(username, password)
     # Extrakce stream_id
@@ -292,8 +292,8 @@ async def live_stream(username: str, password: str, stream_filename: str):
     # Výchozí rychlý 302 Redirect na ČT CDN
     return RedirectResponse(url=stream_url, status_code=302)
 
-@router.get("/movie/{username}/{password}/{stream_filename}")
-@router.get("/series/{username}/{password}/{stream_filename}")
+@router.api_route("/movie/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
+@router.api_route("/series/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
 async def vod_stream(username: str, password: str, stream_filename: str):
     check_auth(username, password)
     idec = stream_filename.split(".")[0]
@@ -312,7 +312,7 @@ async def vod_stream(username: str, password: str, stream_filename: str):
 
 # --- M3U Playlist & EPG Export ---
 
-@router.get("/get.php")
+@router.api_route("/get.php", methods=["GET", "HEAD"])
 async def get_m3u(
     request: Request,
     username: str = Query(...),
@@ -349,7 +349,7 @@ async def get_m3u(
     content = "\n".join(lines)
     return PlainTextResponse(content, media_type="application/x-mpegurl", headers={"Content-Disposition": 'attachment; filename="ivysilani.m3u"'})
 
-@router.get("/xmltv.php")
+@router.api_route("/xmltv.php", methods=["GET", "HEAD"])
 async def get_xmltv(
     request: Request,
     username: str = Query(...),
