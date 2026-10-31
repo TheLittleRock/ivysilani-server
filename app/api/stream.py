@@ -13,7 +13,7 @@ logger = logging.getLogger("stream_api")
 
 router = APIRouter(prefix="/api")
 
-@router.get("/subtitles")
+@router.api_route("/subtitles", methods=["GET", "HEAD"])
 async def proxy_subtitles(url: str = Query(...)):
     """Stáhne a přepošle WebVTT titulky z CDN České televize s CORS hlavičkou."""
     if not url.startswith("http://") and not url.startswith("https://"):
