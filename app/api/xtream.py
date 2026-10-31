@@ -390,6 +390,24 @@ async def player_api(
         logger.exception(f"Unhandled error in player_api: {err}")
         return JSONResponse(status_code=500, content={"error": "Server error", "detail": str(err)})
 
+def parse_catchup_timestamp(raw_time: Optional[str]) -> Optional[int]:
+    """Parsuje časové razítko z různých formátů IPTV klientů (Unix ts, ISO, YYYYmmddHHMMSS)."""
+    if not raw_time:
+        return None
+    raw = str(raw_time).strip()
+    try:
+        if raw.isdigit():
+            if len(raw) == 14:  # YYYYmmddHHMMSS
+                dt = datetime.strptime(raw, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                return int(dt.timestamp())
+            return int(raw)
+        if "T" in raw or "-" in raw:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return int(dt.timestamp())
+    except Exception as e:
+        logger.warning(f"Chyba při parsování času catchup '{raw_time}': {e}")
+    return None
+
 # --- Streamovací Endpointy ---
 
 @router.api_route("/live/{token}/{stream_filename}", methods=["GET", "HEAD"])
@@ -413,21 +431,24 @@ async def live_stream(
     if not ch_code or ch_code not in LIVE_CHANNELS:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    ch = LIVE_CHANNELS[ch_code]
+
+    # Pokud klient žádá timeshift (catchup) přes query parametry (utc, start, lutc)
+    req_time = request.query_params.get("utc") or request.query_params.get("start") or request.query_params.get("lutc")
+    ts = parse_catchup_timestamp(req_time)
+    if ts:
+        prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
+        if prog and prog.get("idec"):
+            logger.info(f"Catchup v /live nalezen pro {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
+            vod_data = await ct_service.resolve_vod_stream(prog["idec"], allow_drm=True)
+            if vod_data and vod_data.get("url"):
+                return RedirectResponse(url=vod_data["url"], status_code=302)
+
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
     if not stream_data or not (stream_data.get("hls_url") or stream_data.get("url")):
         raise HTTPException(status_code=503, detail="Unable to resolve live stream from ČT")
 
-    # Pokud klient žádá timeshift (catchup)
-    has_catchup = any(k in request.query_params for k in ["utc", "lutc", "timeshift", "start"])
-    if has_catchup and stream_data.get("timeshift_url"):
-        stream_url = stream_data["timeshift_url"]
-        # Předat parametry catchup do CDN URL pokud jsou potřeba
-        if "utc" in request.query_params:
-            sep = "&" if "?" in stream_url else "?"
-            stream_url = f"{stream_url}{sep}utc={request.query_params['utc']}"
-    else:
-        stream_url = stream_data.get("hls_url") or stream_data["url"]
-
+    stream_url = stream_data.get("hls_url") or stream_data["url"]
     if settings.STREAM_MODE == "proxy":
         client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
         req = client.build_request("GET", stream_url)
@@ -444,7 +465,8 @@ async def timeshift_stream(
     password: Optional[str] = Query(None),
     token: Optional[str] = Query(None),
     duration: Optional[int] = Query(None),
-    start: Optional[str] = Query(None)
+    start: Optional[str] = Query(None),
+    utc: Optional[str] = Query(None)
 ):
     """Oficiální Xtream Codes timeshift / catchup endpoint pro TiviMate a IPTV aplikace."""
     check_auth(username=username, password=password, token=token)
@@ -457,17 +479,24 @@ async def timeshift_stream(
     if not ch_code or ch_code not in LIVE_CHANNELS:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    ch = LIVE_CHANNELS[ch_code]
+    req_time = start or utc or request.query_params.get("lutc")
+    ts = parse_catchup_timestamp(req_time)
+
+    if ts:
+        prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
+        if prog and prog.get("idec"):
+            logger.info(f"Catchup Timeshift nalezen pro {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
+            vod_data = await ct_service.resolve_vod_stream(prog["idec"], allow_drm=True)
+            if vod_data and vod_data.get("url"):
+                return RedirectResponse(url=vod_data["url"], status_code=302)
+
+    # Fallback na živý stream
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
     if not stream_data:
         raise HTTPException(status_code=503, detail="Unable to resolve stream")
 
-    timeshift_url = stream_data.get("timeshift_url") or stream_data.get("hls_url")
-    if start and timeshift_url:
-        sep = "&" if "?" in timeshift_url else "?"
-        stream_url = f"{timeshift_url}{sep}utc={start}"
-    else:
-        stream_url = timeshift_url
-
+    stream_url = stream_data.get("hls_url") or stream_data["url"]
     if settings.STREAM_MODE == "proxy":
         client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
         req = client.build_request("GET", stream_url)
@@ -523,7 +552,7 @@ async def get_m3u(
         stream_url = f"{base_url}/live/{auth_token}/{s_id}.m3u8"
         logo_rel = ch.get("logo_png") or ch["logo"]
         logo_url = f"{base_url}{logo_rel}"
-        catchup_src = f"{base_url}/live/{auth_token}/{s_id}.m3u8?utc=${{start}}&lutc=${{timestamp}}"
+        catchup_src = f"{base_url}/streaming/timeshift.php?token={auth_token}&stream={s_id}&start=${{start}}&duration=${{duration}}&utc=${{start}}"
         lines.append(f'#EXTINF:-1 tvg-id="{ch["epg_id"]}" tvg-name="{ch["name"]}" tvg-logo="{logo_url}" group-title="{ch["category"]}" catchup="default" catchup-days="14" catchup-source="{catchup_src}",{ch["name"]}')
         lines.append('#KODIPROP:inputstream=inputstream.adaptive')
         lines.append('#KODIPROP:inputstream.adaptive.manifest_type=hls')

@@ -261,6 +261,34 @@ def mark_show_playable(show_id: str, is_playable: bool):
         cursor = conn.cursor()
         cursor.execute("UPDATE shows SET is_playable = ? WHERE id = ?", (1 if is_playable else 0, show_id))
 
+GENRE_STEM_MAP: Dict[str, List[str]] = {
+    "české": ["%Česk%", "%česk%"],
+    "krimi": ["%Krimi%", "%krimi%", "%Detektiv%", "%detektiv%"],
+    "komedie": ["%Komed%", "%komed%"],
+    "zahraniční": ["%Zahranič%", "%zahranič%"],
+    "rodinné": ["%Rodin%", "%rodin%"],
+    "pohádky": ["%Pohád%", "%pohád%"],
+    "psychologické": ["%Psycholog%", "%psycholog%"],
+    "historické": ["%Histor%", "%histor%"],
+    "klasika": ["%Klasik%", "%klasik%"],
+    "drama": ["%Drama%", "%drama%"],
+    "romantické": ["%Romant%", "%romant%"],
+    "životopisné": ["%Životopis%", "%životopis%", "%Biograf%", "%biograf%"],
+    "thriller": ["%Thriller%", "%thriller%"],
+    "thrillery": ["%Thriller%", "%thriller%"],
+    "animované": ["%Animov%", "%animov%"],
+    "literární adaptace": ["%Literár%", "%literár%", "%Adaptace%", "%adaptace%"],
+    "válečné": ["%Váleč%", "%váleč%", "%Válk%", "%válk%"],
+    "studentské": ["%Student%", "%student%", "%Famu%", "%famu%"],
+    "dokumenty": ["%Dokument%", "%dokument%", "%Publicistik%", "%publicistik%"],
+    "zábava": ["%Zábav%", "%zábav%", "%Talk show%", "%talk show%", "%Soutěž%", "%soutěž%"],
+    "pro děti": ["%Dět%", "%dět%", "%Pohád%", "%pohád%"],
+    "talk show": ["%Talk show%", "%talk show%"],
+    "soutěže": ["%Soutěž%", "%soutěž%"],
+    "hudební": ["%Hudeb%", "%hudeb%"],
+    "reality show": ["%Reality%", "%reality%"]
+}
+
 def list_shows(
     genre: Optional[str] = None,
     show_type: Optional[str] = None,
@@ -282,11 +310,19 @@ def list_shows(
                 effective_show_type = "movie"
             elif g_low in ["seriály", "serialy", "seriál", "serial"]:
                 effective_show_type = "series"
-            elif g_low in ["dokumenty", "dokument"]:
-                conditions.append("(genre LIKE '%Dokument%' OR genre LIKE '%Publicistika%')")
-            elif g_low not in ["all", "vše", "vse"]:
-                conditions.append("genre LIKE ?")
-                params.append(f"%{genre}%")
+            elif g_low in GENRE_STEM_MAP:
+                patterns = GENRE_STEM_MAP[g_low]
+                cond = " OR ".join(["genre LIKE ?" for _ in patterns])
+                conditions.append(f"({cond})")
+                params.extend(patterns)
+            elif g_low not in ["all", "vše", "vse", "přehled", "prehled"]:
+                p1 = f"%{genre}%"
+                p2 = f"%{genre.lower()}%"
+                p3 = f"%{genre.capitalize()}%"
+                patterns = list(dict.fromkeys([p1, p2, p3]))
+                cond = " OR ".join(["genre LIKE ?" for _ in patterns])
+                conditions.append(f"({cond})")
+                params.extend(patterns)
 
         if effective_show_type:
             conditions.append("show_type = ?")
@@ -330,11 +366,19 @@ def count_shows(
                 effective_show_type = "movie"
             elif g_low in ["seriály", "serialy", "seriál", "serial"]:
                 effective_show_type = "series"
-            elif g_low in ["dokumenty", "dokument"]:
-                conditions.append("(genre LIKE '%Dokument%' OR genre LIKE '%Publicistika%')")
-            elif g_low not in ["all", "vše", "vse"]:
-                conditions.append("genre LIKE ?")
-                params.append(f"%{genre}%")
+            elif g_low in GENRE_STEM_MAP:
+                patterns = GENRE_STEM_MAP[g_low]
+                cond = " OR ".join(["genre LIKE ?" for _ in patterns])
+                conditions.append(f"({cond})")
+                params.extend(patterns)
+            elif g_low not in ["all", "vše", "vse", "přehled", "prehled"]:
+                p1 = f"%{genre}%"
+                p2 = f"%{genre.lower()}%"
+                p3 = f"%{genre.capitalize()}%"
+                patterns = list(dict.fromkeys([p1, p2, p3]))
+                cond = " OR ".join(["genre LIKE ?" for _ in patterns])
+                conditions.append(f"({cond})")
+                params.extend(patterns)
 
         if effective_show_type:
             conditions.append("show_type = ?")
@@ -431,3 +475,83 @@ def delete_download_task(task_id: str) -> bool:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM downloads WHERE id = ?", (task_id,))
         return cursor.rowcount > 0
+
+# --- Správa EPG televizního programu & Catchup ---
+
+def upsert_epg_programme(
+    prog_id: str,
+    channel_id: str,
+    date_str: str,
+    start_ts: int,
+    end_ts: int,
+    start_time: str,
+    title: str,
+    description: str,
+    idec: str,
+    has_video: bool = False
+) -> bool:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO epg_programmes (id, channel_id, date_str, start_ts, end_ts, start_time, title, description, idec, has_video)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            date_str = excluded.date_str,
+            start_ts = excluded.start_ts,
+            end_ts = excluded.end_ts,
+            start_time = excluded.start_time,
+            title = excluded.title,
+            description = excluded.description,
+            idec = excluded.idec,
+            has_video = excluded.has_video
+        """, (
+            prog_id, channel_id, date_str, start_ts, end_ts,
+            start_time, title, description, idec, 1 if has_video else 0
+        ))
+        return cursor.rowcount > 0
+
+def get_epg_programme_by_time(channel_id: str, req_ts: int) -> Optional[Dict[str, Any]]:
+    """Vyhledá pořad na daném kanálu podle zadaného času (pro Catchup / Timeshift)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 1. Pořad, který v daný čas aktivně běžel
+        cursor.execute("""
+        SELECT * FROM epg_programmes
+        WHERE channel_id = ? AND start_ts <= ? AND end_ts >= ?
+        ORDER BY start_ts DESC LIMIT 1
+        """, (channel_id, req_ts, req_ts))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+
+        # 2. Tolerantní vyhledání nejbližšího pořadu začínajícího do 10 minut
+        cursor.execute("""
+        SELECT * FROM epg_programmes
+        WHERE channel_id = ? AND ABS(start_ts - ?) <= 600
+        ORDER BY ABS(start_ts - ?) ASC LIMIT 1
+        """, (channel_id, req_ts, req_ts))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def list_epg_programmes_for_channel(channel_id: str, date_str: Optional[str] = None) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if date_str:
+            cursor.execute("""
+            SELECT * FROM epg_programmes
+            WHERE channel_id = ? AND date_str = ?
+            ORDER BY start_ts ASC
+            """, (channel_id, date_str))
+        else:
+            cursor.execute("""
+            SELECT * FROM epg_programmes
+            WHERE channel_id = ?
+            ORDER BY start_ts ASC
+            """, (channel_id,))
+        return [dict(r) for r in cursor.fetchall()]
+
+def clear_old_epg(cutoff_ts: int) -> int:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM epg_programmes WHERE end_ts < ?", (cutoff_ts,))
+        return cursor.rowcount

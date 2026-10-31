@@ -65,8 +65,27 @@ class ImageProxyService:
                     new_h = max(1, int(orig_h * scale))
                     resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                    # Tmavé pozadí #0f172a (RGB: 15, 23, 42) pro letterboxing bez ořezu
-                    canvas = Image.new("RGB", (target_w, target_h), color=(15, 23, 42))
+                    # Vzorkování barvy pozadí z okrajů originálního obrázku
+                    edge_pixels = []
+                    step_x = max(1, orig_w // 50)
+                    step_y = max(1, orig_h // 50)
+                    for x in range(0, orig_w, step_x):
+                        edge_pixels.append(img.getpixel((x, 0)))
+                        edge_pixels.append(img.getpixel((x, orig_h - 1)))
+                    for y in range(0, orig_h, step_y):
+                        edge_pixels.append(img.getpixel((0, y)))
+                        edge_pixels.append(img.getpixel((orig_w - 1, y)))
+
+                    if edge_pixels:
+                        avg_r = int(sum(p[0] for p in edge_pixels) / len(edge_pixels))
+                        avg_g = int(sum(p[1] for p in edge_pixels) / len(edge_pixels))
+                        avg_b = int(sum(p[2] for p in edge_pixels) / len(edge_pixels))
+                        # Mírné ztmavení pro přirozený kontrast s plakátem
+                        bg_color = (max(0, int(avg_r * 0.85)), max(0, int(avg_g * 0.85)), max(0, int(avg_b * 0.85)))
+                    else:
+                        bg_color = (15, 23, 42)
+
+                    canvas = Image.new("RGB", (target_w, target_h), color=bg_color)
                     paste_x = (target_w - new_w) // 2
                     paste_y = (target_h - new_h) // 2
                     canvas.paste(resized, (paste_x, paste_y))

@@ -347,14 +347,25 @@
 
             await player.load(data.url);
 
+            // Nastavení výchozího jazyka na češtinu pokud existuje
+            const audioLangs = player.getAudioLanguages();
+            if (audioLangs.includes('cs')) {
+                player.selectAudioLanguage('cs');
+            } else if (audioLangs.includes('ces')) {
+                player.selectAudioLanguage('ces');
+            } else if (audioLangs.includes('cze')) {
+                player.selectAudioLanguage('cze');
+            }
+
             // Načtení externích WebVTT titulků pokud existují
             if (data.subtitles && data.subtitles.length > 0) {
+                let lastTrack = null;
                 for (const sub of data.subtitles) {
                     try {
                         const subUrl = sub.url;
                         const subLang = sub.language || sub.lang || 'ces';
                         const subLabel = sub.label || 'Čeština';
-                        await player.addTextTrackAsync(
+                        lastTrack = await player.addTextTrackAsync(
                             subUrl,
                             subLang,
                             'subtitles',
@@ -366,6 +377,9 @@
                         console.warn('Nepodařilo se přidat titulky:', subErr);
                     }
                 }
+                if (lastTrack) {
+                    player.selectTextTrack(lastTrack);
+                }
                 player.setTextTrackVisibility(true);
                 const subSelect = document.getElementById('vod-sub-select');
                 if (subSelect) subSelect.value = 'on';
@@ -375,6 +389,8 @@
             }
 
             updateVodTracksInUI();
+            setTimeout(updateVodTracksInUI, 800);
+            setTimeout(updateVodTracksInUI, 2000);
 
             const video = document.getElementById('vod-video');
             video.play().catch(e => {
@@ -425,11 +441,23 @@
     function changeVodAudio(lang) {
         if (!player) return;
         player.selectAudioLanguage(lang);
+        const tracks = player.getVariantTracks().filter(t => t.language === lang);
+        if (tracks.length > 0) {
+            player.selectVariantTrack(tracks[0], true);
+        }
     }
 
     function changeVodSubtitles(val) {
         if (!player) return;
-        player.setTextTrackVisibility(val === 'on');
+        if (val === 'off') {
+            player.setTextTrackVisibility(false);
+        } else {
+            const tracks = player.getTextTracks();
+            if (tracks.length > 0) {
+                player.selectTextTrack(tracks[0]);
+            }
+            player.setTextTrackVisibility(true);
+        }
     }
 
     function changeVodQuality(heightVal) {

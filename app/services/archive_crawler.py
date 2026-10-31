@@ -2,6 +2,7 @@ import asyncio
 import logging
 import json
 import time
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 import httpx
 from bs4 import BeautifulSoup
@@ -200,13 +201,27 @@ class ArchiveCrawler:
                         genre_names = [g.get("title") for g in card_genres if g.get("title")]
                         genre = ", ".join(genre_names) if genre_names else cat_name
 
-                        raw_show_type = (item.get("showType") or "").lower()
-                        if parent_slug == "3976-serialy":
+                        btn = item.get("actionButton") or {}
+                        btn_text = (btn.get("text") or "").lower()
+                        btn_action = (btn.get("action") or "").lower()
+
+                        # Detekce typu: pokud má tlačítko "Přehrát první díl", akci GoToEpisode nebo v žánru slovo "seriál"
+                        is_explicit_series = (
+                            "první díl" in btn_text
+                            or "gotoepisode" in btn_action
+                            or "seriál" in genre.lower()
+                            or parent_slug == "3976-serialy"
+                        )
+
+                        existing_show = crud.get_show_by_id(show_id)
+                        if existing_show and existing_show.get("show_type") == "series":
                             show_type = "series"
-                        elif parent_slug == "3947-filmy":
+                        elif is_explicit_series:
+                            show_type = "series"
+                        elif parent_slug == "3947-filmy" or "film" in genre.lower():
                             show_type = "movie"
                         else:
-                            show_type = "movie" if ("film" in raw_show_type or "film" in subcat_slug) else "series"
+                            show_type = "series"
 
                         is_playable = bool(item.get("playable", True))
                         if not is_playable:
@@ -226,10 +241,9 @@ class ArchiveCrawler:
                             year=str(item.get("year") or ""),
                             show_type=show_type,
                             is_playable=True,
-                            total_episodes=1
+                            total_episodes=existing_show.get("total_episodes", 1) if existing_show else 1
                         )
 
-                        btn = item.get("actionButton") or {}
                         default_idec = btn.get("idec")
 
                         if show_type == "movie":
@@ -323,16 +337,17 @@ class ArchiveCrawler:
 
             logger.info(f"Kompletní indexace iVysílání dokončena! Celkem v katalogu: {total_indexed} pořadů.")
             crud.set_setting("last_crawl_info", json.dumps({
-                "timestamp": int(time.time()),
+                "timestamp": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
                 "duration_seconds": int(time.time()) - self.stats["start_time"],
                 "total_indexed": total_indexed,
+                "indexed_shows": total_indexed,
                 "status": "success"
             }))
         except Exception as e:
             logger.error(f"Kritická chyba při indexaci: {e}")
             self.stats["last_error"] = str(e)
             crud.set_setting("last_crawl_info", json.dumps({
-                "timestamp": int(time.time()),
+                "timestamp": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
                 "error": str(e),
                 "status": "error"
             }))

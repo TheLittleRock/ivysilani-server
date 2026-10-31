@@ -89,6 +89,9 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_tmdb_id ON shows(tmdb_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_shows_imdb_id ON shows(imdb_id);")
 
+        # Oprava klasifikace seriálů, které měly v žánru 'seriál', ale byly uloženy jako 'movie'
+        cursor.execute("UPDATE shows SET show_type = 'series' WHERE show_type = 'movie' AND (genre LIKE '%seriál%' OR genre LIKE '%Seriál%');")
+
         # 3. Tabulka epizod
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
@@ -140,6 +143,24 @@ def init_db():
         );
         """)
         cursor.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('tmdb_api_key', ?)", ("2f453df93e1dd76ca1e176029a0f9baf",))
+
+        # 6. Tabulka EPG televizního programu pro Catchup a XMLTV
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS epg_programmes (
+            id TEXT PRIMARY KEY,
+            channel_id TEXT NOT NULL,
+            date_str TEXT NOT NULL,
+            start_ts INTEGER NOT NULL,
+            end_ts INTEGER NOT NULL,
+            start_time TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            idec TEXT,
+            has_video INTEGER DEFAULT 0
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_epg_channel_ts ON epg_programmes(channel_id, start_ts, end_ts);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_epg_idec ON epg_programmes(idec);")
 
         # Vytvoření výchozího administrátora, pokud ještě neexistuje
         cursor.execute("SELECT id, user_token FROM users WHERE username = ?", (settings.DEFAULT_ADMIN_USER,))

@@ -3,6 +3,14 @@
 {% block title %}Živé vysílání ČT - iVysílání Server{% endblock %}
 
 {% block content %}
+<style>
+    /* Vypnout výchozí Shaka UI prvky pro Live TV – používáme výhradně vlastní moderní panel */
+    #video-container .shaka-controls-container,
+    #video-container .shaka-overflow-menu,
+    #video-container .shaka-scrim-container {
+        display: none !important;
+    }
+</style>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <!-- Levý / Hlavní sloupec: Video Player -->

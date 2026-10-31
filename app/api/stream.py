@@ -37,7 +37,7 @@ async def proxy_subtitles(url: str = Query(...)):
         logger.error(f"Error proxying subtitles from {url}: {e}")
         raise HTTPException(status_code=502, detail="Subtitle proxy error")
 
-@router.get("/image-proxy")
+@router.api_route("/image-proxy", methods=["GET", "HEAD"])
 async def get_image_proxy(url: str, pad: Optional[str] = Query(None)):
     content, media_type = await image_proxy.fetch_image(url, pad=pad)
     if not content:

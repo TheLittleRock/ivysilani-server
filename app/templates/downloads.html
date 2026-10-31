@@ -40,34 +40,22 @@
                 <div id="task-card-{{ t.id }}" class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div class="space-y-1.5 flex-grow">
                         <div class="flex items-center space-x-2">
-                            {% if t.status == 'completed' %}
-                            <span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold">DOKONČENO</span>
-                            {% elif t.status == 'downloading' %}
-                            <span class="px-2 py-0.5 bg-blue-950 text-blue-400 border border-blue-800 rounded text-[10px] font-bold animate-pulse">STAHOVÁNÍ</span>
-                            {% elif t.status == 'failed' %}
-                            <span class="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded text-[10px] font-bold">CHYBA</span>
-                            {% else %}
-                            <span class="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px] font-bold">{{ t.status|upper }}</span>
-                            {% endif %}
+                            <span id="task-status-{{ t.id }}" class="px-2 py-0.5 {% if t.status == 'completed' %}bg-emerald-950 text-emerald-400 border border-emerald-800{% elif t.status == 'downloading' %}bg-blue-950 text-blue-400 border border-blue-800 animate-pulse{% elif t.status == 'failed' %}bg-red-950 text-red-400 border border-red-800{% else %}bg-slate-800 text-slate-400{% endif %} rounded text-[10px] font-bold">
+                                {{ 'DOKONČENO' if t.status == 'completed' else ('STAHOVÁNÍ' if t.status == 'downloading' else ('CHYBA' if t.status == 'failed' else t.status|upper)) }}
+                            </span>
                             <h4 class="text-sm font-bold text-white">{{ t.title }}</h4>
                         </div>
 
                         <!-- Průběh stahování -->
                         <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden max-w-md">
-                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ t.progress }}%"></div>
+                            <div class="progress-bar bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ t.progress }}%"></div>
                         </div>
 
                         <div class="text-[11px] text-slate-400 flex flex-wrap items-center gap-3">
-                            <span>Průběh: <strong class="text-white">{{ t.progress }}%</strong></span>
-                            {% if t.speed %}
-                            <span class="text-blue-400 font-medium"><i class="fa-solid fa-gauge-high mr-1"></i>{{ t.speed }}</span>
-                            {% endif %}
-                            {% if t.eta %}
-                            <span class="text-slate-300"><i class="fa-solid fa-clock mr-1"></i>Zbývá: {{ t.eta }}</span>
-                            {% endif %}
-                            {% if t.filesize %}
-                            <span>Velikost: <strong class="text-white">{{ (t.filesize / 1024 / 1024)|round(1) }} MB</strong></span>
-                            {% endif %}
+                            <span>Průběh: <strong id="task-pct-{{ t.id }}" class="text-white">{{ t.progress }}%</strong></span>
+                            <span id="task-speed-{{ t.id }}" class="text-blue-400 font-medium">{% if t.speed %}<i class="fa-solid fa-gauge-high mr-1"></i>{{ t.speed }}{% endif %}</span>
+                            <span id="task-eta-{{ t.id }}" class="text-slate-300">{% if t.eta %}<i class="fa-solid fa-clock mr-1"></i>Zbývá: {{ t.eta }}{% endif %}</span>
+                            <span id="task-size-{{ t.id }}">{% if t.filesize %}Velikost: <strong class="text-white">{{ (t.filesize / 1024 / 1024)|round(1) }} MB</strong>{% endif %}</span>
                             {% if t.filepath %}
                             <span class="text-slate-500 font-mono text-[10px] truncate max-w-xs">{{ t.filepath }}</span>
                             {% endif %}
@@ -80,7 +68,7 @@
                     <!-- Tlačítka -->
                     <div class="flex items-center space-x-2 self-end md:self-auto">
                         {% if t.status == 'completed' %}
-                        <button onclick="playLocalFile('{{ t.id }}', '{{ t.title }}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5">
+                        <button onclick="playLocalFile('{{ t.id }}', '{{ t.title }}')" class="play-local-btn px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1.5">
                             <i class="fa-solid fa-play text-[10px]"></i>
                             <span>Přehrát z disku</span>
                         </button>
@@ -131,7 +119,7 @@
         }
     }
 
-    // Auto-refresh stavu úloh každé 2 sekundy, pokud některé běží
+    // Auto-refresh stavu úloh každých 1.5 sekundy v reálném čase
     let pollInterval = setInterval(async () => {
         try {
             const resp = await fetch('/api/downloads/list');
@@ -139,23 +127,50 @@
             const data = await resp.json();
             const tasks = data.tasks || [];
             
-            const hasActive = tasks.some(t => t.status === 'downloading' || t.status === 'pending');
-            if (hasActive) {
-                // Aktualizujeme prvky na stránce
-                tasks.forEach(t => {
-                    const card = document.getElementById(`task-card-${t.id}`);
-                    if (card) {
-                        const bar = card.querySelector('.bg-blue-600');
-                        if (bar) bar.style.width = `${t.progress}%`;
-                    } else {
-                        // Pokud přibyla nová úloha, reloadujeme
-                        window.location.reload();
+            tasks.forEach(t => {
+                const card = document.getElementById(`task-card-${t.id}`);
+                if (!card) {
+                    window.location.reload();
+                    return;
+                }
+                const bar = card.querySelector('.progress-bar');
+                if (bar) bar.style.width = `${t.progress}%`;
+                
+                const pctEl = document.getElementById(`task-pct-${t.id}`);
+                if (pctEl) pctEl.textContent = `${t.progress}%`;
+                
+                const speedEl = document.getElementById(`task-speed-${t.id}`);
+                if (speedEl) speedEl.innerHTML = t.speed ? `<i class="fa-solid fa-gauge-high mr-1"></i>${t.speed}` : '';
+                
+                const etaEl = document.getElementById(`task-eta-${t.id}`);
+                if (etaEl) etaEl.innerHTML = t.eta ? `<i class="fa-solid fa-clock mr-1"></i>Zbývá: ${t.eta}` : '';
+
+                const sizeEl = document.getElementById(`task-size-${t.id}`);
+                if (sizeEl && t.filesize) {
+                    const mb = (t.filesize / 1024 / 1024).toFixed(1);
+                    sizeEl.innerHTML = `Velikost: <strong class="text-white">${mb} MB</strong>`;
+                }
+
+                const statusEl = document.getElementById(`task-status-${t.id}`);
+                if (statusEl) {
+                    if (t.status === 'completed') {
+                        statusEl.className = 'px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold';
+                        statusEl.textContent = 'DOKONČENO';
+                    } else if (t.status === 'downloading') {
+                        statusEl.className = 'px-2 py-0.5 bg-blue-950 text-blue-400 border border-blue-800 rounded text-[10px] font-bold animate-pulse';
+                        statusEl.textContent = 'STAHOVÁNÍ';
+                    } else if (t.status === 'failed') {
+                        statusEl.className = 'px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded text-[10px] font-bold';
+                        statusEl.textContent = 'CHYBA';
                     }
-                });
-            }
+                }
+
+                if (t.status === 'completed' && !card.querySelector('.play-local-btn')) {
+                    window.location.reload();
+                }
+            });
         } catch (e) {
-            // Ignorovat síťové chyby
         }
-    }, 2000);
+    }, 1500);
 </script>
 {% endblock %}

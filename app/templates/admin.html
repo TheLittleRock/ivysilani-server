@@ -94,9 +94,13 @@
                 </div>
                 {% if last_crawl_info %}
                 <div class="text-slate-400 border-l border-slate-800 pl-4 hidden md:block">
-                    <span>Poslední běh:</span>
-                    <span class="text-slate-200 font-semibold ml-1">{{ last_crawl_info.timestamp[:19] }}</span>
-                    <span class="text-slate-500 ml-1">({{ last_crawl_info.duration_seconds }} s, +{{ last_crawl_info.indexed_shows }} položek)</span>
+                    <span>Poslední automatická indexace:</span>
+                    <span class="text-slate-200 font-semibold ml-1">{{ last_crawl_info.timestamp }}</span>
+                    {% if last_crawl_info.status == 'success' %}
+                    <span class="text-emerald-400 ml-1">({{ last_crawl_info.duration_seconds }} s, +{{ last_crawl_info.indexed_shows or last_crawl_info.total_indexed or 0 }} pořadů)</span>
+                    {% else %}
+                    <span class="text-red-400 ml-1">(Chyba: {{ last_crawl_info.error }})</span>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>

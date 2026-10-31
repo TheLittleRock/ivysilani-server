@@ -11,7 +11,7 @@ from app.core.logging_config import setup_logging
 from app.db.database import init_db
 from app.services.downloader import download_manager
 from app.services.archive_crawler import archive_crawler
-from app.services.epg_service import update_external_epg
+from app.services.epg_service import run_periodic_epg
 from app.api.web import router as web_router
 from app.api.xtream import router as xtream_router
 from app.api.stream import router as stream_router
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     crawler_task = asyncio.create_task(archive_crawler.run_periodic_crawler())
     
     logger.info("Spouštění stahování EPG dat na pozadí...")
-    epg_task = asyncio.create_task(update_external_epg())
+    epg_task = asyncio.create_task(run_periodic_epg())
     
     yield
     

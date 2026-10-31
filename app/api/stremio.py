@@ -261,7 +261,7 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
             "releaseInfo": str(s.get("year") or ""),
             "genres": genres_list or ["iVysílání"]
         }
-        if s.get("imdb_id"):
+        if s_type == "movie" and s.get("imdb_id"):
             item["imdb_id"] = s["imdb_id"]
         metas.append(item)
 
@@ -359,7 +359,7 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
             "releaseInfo": str(show.get("year") or ""),
             "genres": genres_list or ["iVysílání"]
         }
-        if show.get("imdb_id"):
+        if is_movie and show.get("imdb_id"):
             meta["imdb_id"] = show["imdb_id"]
 
         if is_movie:
@@ -378,7 +378,7 @@ async def handle_meta(request: Request, type: str, id: str, token: Optional[str]
                 ep_clean_title = clean_name or ep.get("title") or show["title"]
 
                 videos.append({
-                    "id": f"ct_ep_{ep['idec']}",
+                    "id": f"{id_clean}:{ep.get('season', 1)}:{ep.get('episode_num', 1)}",
                     "title": ep_clean_title,
                     "season": ep.get("season", 1),
                     "episode": ep.get("episode_num", 1),
@@ -425,7 +425,7 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         })
         return cors_response({"streams": streams})
 
-    # 2. Epizoda pořadu podle IDEC
+    # 2. Epizoda pořadu přímo podle IDEC
     if id_clean.startswith("ct_ep_"):
         idec = id_clean.replace("ct_ep_", "")
         stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
@@ -457,13 +457,46 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         streams.append(stream_obj)
         return cors_response({"streams": streams})
 
-    # 3. Pořad přímo podle ČT show_id (např. film)
+    # 3. Pořad přímo podle ČT show_id (film nebo seriál: ct_show_{id}:{season}:{episode})
     if id_clean.startswith("ct_show_"):
-        show_id = id_clean.replace("ct_show_", "")
+        raw_id = id_clean.replace("ct_show_", "")
+        parts = raw_id.split(":")
+        show_id = parts[0]
+        has_ep_params = len(parts) > 1
+        season_num = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+        ep_num = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+
+        show = crud.get_show_by_id(show_id)
         episodes = crud.get_episodes_by_show(show_id)
+        if not episodes and show_id:
+            try:
+                from app.services.archive_crawler import archive_crawler
+                await archive_crawler.index_show(show_id)
+                episodes = crud.get_episodes_by_show(show_id)
+            except Exception:
+                pass
+
         playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
         if playable_episodes:
-            idec = playable_episodes[0]["idec"]
+            target_ep = None
+            if has_ep_params and (not show or show.get("show_type") != "movie"):
+                # 1. Přesná shoda série a epizody
+                for ep in playable_episodes:
+                    if ep.get("season") == season_num and ep.get("episode_num") == ep_num:
+                        target_ep = ep
+                        break
+                # 2. Shoda indexu v rámci série
+                if not target_ep:
+                    s_eps = [ep for ep in playable_episodes if ep.get("season") == season_num]
+                    if s_eps and 0 <= ep_num - 1 < len(s_eps):
+                        target_ep = s_eps[ep_num - 1]
+                # 3. Fallback na první
+                if not target_ep:
+                    target_ep = playable_episodes[0]
+            else:
+                target_ep = playable_episodes[0]
+
+            idec = target_ep["idec"]
             stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
             
             subs = []
@@ -481,9 +514,13 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
             except Exception as e:
                 logger.debug(f"Subtitles resolve failed for {idec}: {e}")
 
+            show_title = show["title"] if show else target_ep.get("title", "iVysílání")
+            ep_title = target_ep.get("title") or show_title
+            label = f"[iVysílání] {show_title} - S{season_num:02d}E{ep_num:02d} (1080p HLS)" if has_ep_params else f"[iVysílání] {show_title} (1080p HLS)"
+
             stream_obj = {
                 "name": "Česká televize (iVysílání)",
-                "title": f"[iVysílání] {playable_episodes[0].get('title', 'Film')} (1080p HLS)",
+                "title": label,
                 "url": stream_url
             }
             if subs:
@@ -514,6 +551,12 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
             show = crud.get_show_by_tmdb_id(raw_tmdb)
 
         if show:
+            # Speciální mapování pro Vyprávěj: Season 0 ep 7–15 -> Season 6 (Osudy)
+            if str(show.get("id")) == "10195164142":
+                if season_num == 0 and 7 <= ep_num <= 15:
+                    season_num = 6
+                    ep_num = ep_num - 6
+
             episodes = crud.get_episodes_by_show(show["id"], only_playable=True)
             if not episodes and show.get("id"):
                 try:
@@ -531,8 +574,12 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
                     if ep.get("season") == season_num and ep.get("episode_num") == ep_num:
                         target_ep = ep
                         break
+                if not target_ep:
+                    s_eps = [ep for ep in episodes if ep.get("season") == season_num]
+                    if s_eps and 0 <= ep_num - 1 < len(s_eps):
+                        target_ep = s_eps[ep_num - 1]
                 if not target_ep and episodes:
-                    target_ep = episodes[min(ep_num - 1, len(episodes) - 1)]
+                    target_ep = episodes[0]
 
             if target_ep:
                 idec = target_ep["idec"]
