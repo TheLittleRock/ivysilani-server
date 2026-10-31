@@ -34,7 +34,7 @@ def is_using_default_password(user: Optional[dict]) -> bool:
 def require_admin(request: Request) -> dict:
     user = get_current_user(request)
     if not user or not user.get("is_admin"):
-        raise HTTPException(status_code=303, headers={"Location": "/login?error=Vyžadováno+přihlášení+administrátora"})
+        raise HTTPException(status_code=303, headers={"Location": "/login?error=Vyzadovano+prihlaseni+administratora"})
     return user
 
 def get_base_url(request: Request) -> str:
@@ -275,7 +275,7 @@ async def admin_page(
 ):
     user = get_current_user(request)
     if not user or not user.get("is_admin"):
-        return RedirectResponse(url="/login?error=Vyžadováno+přihlášení+administrátora", status_code=303)
+        return RedirectResponse(url="/login?error=Vyzadovano+prihlaseni+administratora", status_code=303)
 
     users = crud.list_users()
     crawler_stats = archive_crawler.stats
