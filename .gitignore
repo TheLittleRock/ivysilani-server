@@ -37,9 +37,7 @@ venv.bak/
 *.db
 *.db-wal
 *.db-shm
-data/*.db
-data/*.db-wal
-data/*.db-shm
+data/
 
 # IDE & OS
 .vscode/

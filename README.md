@@ -1,9 +1,10 @@
 # iVysílání Server 📺
 
-> Moderní webová aplikace a Xtream Codes IPTV / VOD server pro Českou televizi a iVysílání. Umožňuje přehrávání živého vysílání všech 14 kanálů ČT, procházení a sledování archivu pořadů přímo ve webovém prohlížeči, stahování do MP4 i integraci do IPTV aplikací (TiviMate, IPTV Smarters, Kodi, VLC) přes protokol Xtream Codes a M3U/EPG.
+> Moderní webová aplikace a Xtream Codes IPTV / VOD server pro Českou televizi a iVysílání. Umožňuje přehrávání živého vysílání všech 14 kanálů ČT, procházení a sledování archivu pořadů přímo ve webovém prohlížeči, stahování do MP4 i integraci do IPTV aplikací (TiviMate, IPTV Smarters, Kodi, VLC, Stremio, StreamCube) přes protokol Xtream Codes, M3U/EPG a nativní doplňky.
 
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](CHANGELOG.md)
 [![Docker Image](https://github.com/TheLittleRock/ivysilani-server/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/TheLittleRock/ivysilani-server/actions/workflows/docker-publish.yml)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 ---
 
@@ -207,7 +208,22 @@ Propojení s přehrávači je mimořádně jednoduché. Podporovány jsou všech
 1. Otevřete webové rozhraní iVysílání serveru a přejděte na záložku **Stremio**.
 2. Klikněte na **"Nainstalovat do Stremio jedním klikem"** (přímý protokol `stremio://<domena>/stremio/manifest.json`).
 3. Ve Stremio klikněte na **Install**.
-4. Pokud používáte Stremio na Android TV / Google TV, přihlaste se stejným účtem – doplněk se automaticky synchronizuje do vaší televize! V sekci *Objevovat (Discover)* najdete jak živé stanice ČT, tak rozsáhlý archiv iVysílání rozdělený do kategorií.
+4. Pokud používáte Stremio na Android TV / Google TV, přihlaste se stejným účtem – doplněk se automaticky synchronizuje do vaší televize! V sekci *Objevovat (Discover)* najdete rozsáhlý archiv iVysílání rozdělený do kategorií s českým dabingem a titulky.
+
+### 6. StreamCube (Android TV / Web / Mobil) 📦
+1. V aplikaci StreamCube přejděte do Správce doplňků a zadejte manifest URL:
+   `https://<domena>/streamcube/manifest.json` (nebo s tokenem `/streamcube/<token>/manifest.json`).
+2. Doplněk podporuje kompletní katalog filmů, seriálů i přímé živé vysílání 14 stanic ČT.
+
+### 7. Crawler & Go klienti (xtream-gui-linux / xtream-tui) 🤖
+- Server plně dodržuje striktní typování pro Go unmarshaler (`stream_id` a `series_id` jako celá čísla `int`).
+- V konfiguraci klienta (`~/.config/xtream-tui_config.toml`):
+  ```toml
+  server = "https://<domena>"
+  username = "<vas_token_nebo_admin>"
+  password = "<vas_token_nebo_heslo>"
+  ```
+- Nativně podporuje GZip kompresi odpovědí a rychlé vyhledávání.
 
 ---
 

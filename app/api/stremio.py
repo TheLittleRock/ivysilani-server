@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.version import __version__
 from app.db import crud
 from app.services.ct_service import ct_service, clean_episode_title, LIVE_CHANNELS
 from app.services.image_proxy import image_proxy
@@ -199,7 +200,7 @@ def build_manifest(base_url: str, token: Optional[str] = None, is_streamcube: bo
 
     manifest = {
         "id": "cz.thelittlerock.ivysilani.streamcube" if is_streamcube else "cz.thelittlerock.ivysilani",
-        "version": "2.1.0",
+        "version": __version__,
         "name": "Česká televize (StreamCube)" if is_streamcube else "Česká televize (iVysílání)",
         "description": "Kompletní filmový a seriálový archiv České televize (iVysílání), živé vysílání 14 stanic ČT s EPG a IPTV podporou." if is_streamcube else "Kompletní filmový a seriálový archiv České televize (iVysílání) s českým dabingem a titulky.",
         "logo": f"{base_url}/static/logos/ct1.png",

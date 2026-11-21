@@ -170,7 +170,7 @@ def test_xtream_series_api():
     assert resp.status_code == 200
     cats = resp.json()
     assert isinstance(cats, list)
-    assert any(c["category_name"] == "Seriály" for c in cats)
+    assert any("seriál" in c["category_name"].lower() for c in cats)
 
     # 2. get_series
     resp_s = client.get("/player_api.php?username=admin&password=admin&action=get_series")

@@ -9,6 +9,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from app.core.config import settings
 from app.core.logging_config import setup_logging
+from app.version import __version__, get_version_info
 from app.db.database import init_db
 from app.services.downloader import download_manager
 from app.services.archive_crawler import archive_crawler
@@ -23,6 +24,7 @@ logger = logging.getLogger("ivysilani")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info(f"Startování iVysílání Server v{__version__}...")
     logger.info("Inicializace databáze...")
     init_db()
     
@@ -45,9 +47,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="iVysílání Server",
     description="Moderní webová aplikace a Xtream Codes IPTV / VOD server pro Českou televizi a iVysílání",
-    version="1.0.0",
+    version=__version__,
     lifespan=lifespan
 )
+
+@app.get("/api/version", tags=["Systém"])
+async def api_version():
+    """Vrací aktuální verzi serveru, git commit a verze podporovaných rozhraní."""
+    return get_version_info()
 
 # CORS middleware pro klientské přehrávače a widgety
 app.add_middleware(

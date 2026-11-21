@@ -68,6 +68,7 @@
                 <a href="/" class="flex items-center space-x-2 text-xl font-bold tracking-tight text-white hover:text-blue-400 transition">
                     <img src="/static/favicon.svg" alt="ČT" class="w-7 h-7 object-contain" />
                     <span>iVysílání <span class="text-blue-500 text-sm font-semibold">Server</span></span>
+                    <span class="hidden sm:inline-block bg-blue-600/20 text-blue-400 border border-blue-500/30 text-[10px] px-1.5 py-0.5 rounded-full font-mono font-normal">v{{ app_version }}</span>
                 </a>
             </div>
 
@@ -202,6 +203,7 @@
         <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
             <p>iVysílání Server &copy; 2026. Založeno na práci komunitních projektů <a href="https://github.com/waladir/plugin.video.ivysilani.cz" target="_blank" class="text-blue-400 hover:underline">plugin.video.ivysilani.cz</a> &amp; <a href="https://github.com/sunecz/Media-Downloader" target="_blank" class="text-blue-400 hover:underline">Media-Downloader</a>.</p>
             <div class="flex items-center space-x-4">
+                <span class="text-slate-400 font-mono text-[11px]"><i class="fa-solid fa-code-branch mr-1 text-slate-500"></i> v{{ app_version }}</span>
                 <span class="text-slate-400"><i class="fa-solid fa-server mr-1"></i> Port 5002</span>
                 <span class="text-emerald-400"><i class="fa-solid fa-circle text-[8px] mr-1"></i> Připraveno</span>
             </div>

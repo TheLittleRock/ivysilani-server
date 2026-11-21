@@ -10,6 +10,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.core.security import verify_password
+from app.version import __version__
 from app.db import crud
 from app.services.ct_service import ct_service, LIVE_CHANNELS
 from app.services.downloader import download_manager
@@ -18,6 +19,7 @@ from app.services.archive_crawler import archive_crawler
 router = APIRouter()
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.globals["app_version"] = __version__
 
 def get_current_user(request: Request) -> Optional[dict]:
     username = request.cookies.get("ivys_user")

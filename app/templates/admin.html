@@ -19,6 +19,66 @@
     </div>
     {% endif %}
 
+    <!-- 0. Informace o systému a verze -->
+    <div class="bg-gradient-to-r from-blue-950/40 to-slate-900 border border-blue-900/40 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center space-x-3.5">
+                <div class="w-11 h-11 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-xl shrink-0 border border-blue-500/20">
+                    <i class="fa-solid fa-server"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2.5">
+                        <h2 class="text-base font-bold text-white">iVysílání Server</h2>
+                        <span class="bg-blue-600 text-white font-mono text-xs font-bold px-2 py-0.5 rounded-full shadow">v{{ app_version }}</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-0.5">Produkční IPTV / VOD server pro Českou televizi s unencrypted HbbTV HLS &amp; EPG.</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <a href="/api/version" target="_blank" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-xs rounded-lg transition border border-slate-700 flex items-center space-x-1.5 shadow-sm">
+                    <i class="fa-solid fa-code text-[10px] text-blue-400"></i>
+                    <span>/api/version</span>
+                </a>
+                <a href="/docs" target="_blank" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-xs rounded-lg transition border border-slate-700 flex items-center space-x-1.5 shadow-sm">
+                    <i class="fa-solid fa-book text-[10px] text-emerald-400"></i>
+                    <span>OpenAPI Docs</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-800/80">
+            <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                <div class="text-slate-500 text-[10px] uppercase font-semibold">Xtream API</div>
+                <div class="font-bold text-slate-200 mt-0.5 flex items-center space-x-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>v2.2.0 (Active)</span>
+                </div>
+            </div>
+            <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                <div class="text-slate-500 text-[10px] uppercase font-semibold">Stremio Addon</div>
+                <div class="font-bold text-slate-200 mt-0.5 flex items-center space-x-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>v2.2.0 (Active)</span>
+                </div>
+            </div>
+            <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                <div class="text-slate-500 text-[10px] uppercase font-semibold">StreamCube</div>
+                <div class="font-bold text-slate-200 mt-0.5 flex items-center space-x-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>v1.0.0 (Active)</span>
+                </div>
+            </div>
+            <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                <div class="text-slate-500 text-[10px] uppercase font-semibold">HbbTV DRM Bypass</div>
+                <div class="font-bold text-slate-200 mt-0.5 flex items-center space-x-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>1080p Unencrypted</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 1. Změna administrátorského hesla -->
     <div id="change-password" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <div class="flex items-center space-x-3">

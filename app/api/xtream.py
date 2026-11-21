@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse, StreamingResponse, PlainTextResp
 import httpx
 
 from app.core.config import settings
+from app.version import __version__
 from app.db import crud
 from app.services.ct_service import ct_service, LIVE_CHANNELS
 from app.services.epg_service import generate_xmltv_epg
@@ -241,7 +242,8 @@ async def player_api(
                     "rtmp_port": "8880",
                     "timezone": "Europe/Prague",
                     "time_now": now_dt_prague.strftime("%Y-%m-%d %H:%M:%S"),
-                    "timestamp_now": now_ts
+                    "timestamp_now": now_ts,
+                    "version": __version__
                 }
             }
 
