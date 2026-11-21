@@ -1,6 +1,7 @@
 import time
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, Union, Any
 from fastapi import APIRouter, Request, Response, HTTPException, Query
 from fastapi.responses import RedirectResponse, StreamingResponse, PlainTextResponse, JSONResponse
@@ -114,8 +115,7 @@ CHANNEL_STREAM_MAP = {
 }
 CHANNEL_ID_TO_STREAM_ID = {v: k for k, v in CHANNEL_STREAM_MAP.items()}
 
-@router.get("/player_api.php")
-@router.post("/player_api.php")
+@router.api_route("/player_api.php", methods=["GET", "POST", "HEAD"])
 async def player_api(
     request: Request,
     username: Optional[str] = Query(None),
@@ -225,7 +225,7 @@ async def player_api(
                 for c in XTREAM_VOD_CATEGORIES
             ]
 
-        # 5. VOD Seznam (Pouze celovečerní filmy)
+        # 5. VOD Seznam (Pouze celovečerní filmy - optimalizovaný jeden dotaz bez 502 limitu)
         if action == "get_vod_streams":
             genre_filter = None
             if category_id:
@@ -234,7 +234,7 @@ async def player_api(
                         genre_filter = c["genre_key"]
                         break
 
-            movies = crud.list_movies(genre=genre_filter, only_playable=True, limit=500)
+            movies = crud.list_playable_movies_with_idec(genre=genre_filter)
             vod_streams = []
             for idx, m in enumerate(movies, start=1):
                 cat_id = "1"
@@ -244,11 +244,8 @@ async def player_api(
                         cat_id = c["category_id"]
                         break
 
-                episodes = crud.get_episodes_by_show(m["id"])
-                playable_eps = [ep for ep in episodes if ep.get("is_playable", 1)]
-                idec = playable_eps[0]["idec"] if playable_eps else m["id"]
-
-                poster_raw = m.get("poster_url") or m.get("image_url")
+                idec = m.get("idec") or m["id"]
+                poster_raw = m.get("tmdb_poster") or m.get("poster_url") or m.get("image_url")
                 poster_url = image_proxy.build_proxy_url(base_url, poster_raw, pad="2x3")
 
                 vod_streams.append({
@@ -311,7 +308,7 @@ async def player_api(
                         genre_filter = c["genre_key"]
                         break
 
-            shows = crud.list_series(genre=genre_filter, only_playable=True, limit=500)
+            shows = crud.list_series(genre=genre_filter, only_playable=True, limit=None)
             series_list = []
             for idx, s in enumerate(shows, start=1):
                 cat_id = "1"
@@ -321,9 +318,9 @@ async def player_api(
                         cat_id = c["category_id"]
                         break
 
-                cover_raw = s.get("poster_url") or s.get("image_url")
+                cover_raw = s.get("tmdb_poster") or s.get("poster_url") or s.get("image_url")
                 cover_proxy = image_proxy.build_proxy_url(base_url, cover_raw, pad="2x3")
-                backdrop_proxy = image_proxy.build_proxy_url(base_url, s.get("backdrop_url") or cover_raw)
+                backdrop_proxy = image_proxy.build_proxy_url(base_url, s.get("tmdb_backdrop") or s.get("backdrop_url") or cover_raw)
 
                 series_list.append({
                     "num": idx,
@@ -420,18 +417,45 @@ async def player_api(
         return JSONResponse(status_code=500, content={"error": "Server error", "detail": str(err)})
 
 def parse_catchup_timestamp(raw_time: Optional[str]) -> Optional[int]:
-    """Parsuje časové razítko z různých formátů IPTV klientů (Unix ts, ISO, YYYYmmddHHMMSS)."""
+    """Parsuje časové razítko z různých formátů IPTV klientů (Unix ts, ISO, YYYYmmddHHMMSS, YYYY-MM-DD:HH-MM)."""
     if not raw_time:
         return None
     raw = str(raw_time).strip()
+    if not raw or raw.startswith("${"):
+        return None
+    tz_prague = ZoneInfo("Europe/Prague")
     try:
+        # Čistá čísla (Unix ts nebo formáty YYYYMMDDHHMMSS / YYYYMMDDHHMM)
         if raw.isdigit():
+            val = int(raw)
             if len(raw) == 14:  # YYYYmmddHHMMSS
-                dt = datetime.strptime(raw, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                dt = datetime.strptime(raw, "%Y%m%d%H%M%S").replace(tzinfo=tz_prague)
                 return int(dt.timestamp())
-            return int(raw)
+            if len(raw) == 12:  # YYYYmmddHHMM
+                dt = datetime.strptime(raw, "%Y%m%d%H%M").replace(tzinfo=tz_prague)
+                return int(dt.timestamp())
+            if val > 100_000_000_000:  # Milisekundy
+                return val // 1000
+            return val
+
+        # TiviMate / XC timeshift formát: YYYY-MM-DD:HH-MM nebo YYYY-MM-DD:HH-MM-SS
+        if ":" in raw and "-" in raw and "T" not in raw:
+            parts = raw.split(":")
+            if len(parts) >= 2:
+                date_part = parts[0]
+                h = int(parts[1])
+                m = int(parts[2]) if len(parts) > 2 else 0
+                s = int(parts[3]) if len(parts) > 3 else 0
+                y, mo, d = [int(x) for x in date_part.split("-")]
+                dt = datetime(y, mo, d, h, m, s, tzinfo=tz_prague)
+                return int(dt.timestamp())
+
+        # ISO formáty
         if "T" in raw or "-" in raw:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            iso_str = raw.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=tz_prague)
             return int(dt.timestamp())
     except Exception as e:
         logger.warning(f"Chyba při parsování času catchup '{raw_time}': {e}")
@@ -512,6 +536,16 @@ async def timeshift_stream(
     req_time = start or utc or request.query_params.get("lutc")
     ts = parse_catchup_timestamp(req_time)
 
+    # Bezpečný výpočet délky
+    dur_secs = 3600
+    if duration and not duration.startswith("${"):
+        try:
+            dur_secs = int(float(duration))
+            if dur_secs <= 0:
+                dur_secs = 3600
+        except Exception:
+            dur_secs = 3600
+
     forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
     base_url = f"{forwarded_proto}://{forwarded_host}"
@@ -522,12 +556,16 @@ async def timeshift_stream(
             logger.info(f"Catchup Timeshift nalezen pro {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
             return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
 
-    # Fallback na živý/timeshift stream
+    # Fallback na ČT živý / timeshift HLS stream
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
     if not stream_data:
         raise HTTPException(status_code=503, detail="Unable to resolve stream")
 
     stream_url = stream_data.get("timeshift_url") or stream_data.get("hls_url") or stream_data["url"]
+    if ts and "timeshift" in stream_url:
+        join_char = "&" if "?" in stream_url else "?"
+        stream_url += f"{join_char}start={ts}&duration={dur_secs}"
+
     return RedirectResponse(url=stream_url, status_code=302)
 
 @router.api_route("/movie/{token}/{stream_filename}", methods=["GET", "HEAD"])

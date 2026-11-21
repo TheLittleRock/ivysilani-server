@@ -72,7 +72,8 @@ async def favicon_ico():
 # Registrace routerů
 app.include_router(stream_router)
 app.include_router(xtream_router)
-app.include_router(stremio_router)
+app.include_router(stremio_router, prefix="/stremio")
+app.include_router(stremio_router, prefix="/streamcube")
 app.include_router(web_router)
 
 if __name__ == "__main__":

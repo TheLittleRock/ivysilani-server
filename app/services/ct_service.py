@@ -643,14 +643,17 @@ class CTService:
                             if it.get("title") and it.get("id"):
                                 raw_p = (it.get("images") or {}).get("cardPortrait")
                                 portrait = raw_p if raw_p and "fallbackImages" not in raw_p else None
+                                prog = it.get("programme") or {}
+                                canon_id = str(prog.get("id")) if prog.get("id") else str(it.get("id"))
                                 valid_items.append({
-                                    "id": str(it.get("id")),
+                                    "id": canon_id,
+                                    "asset_id": str(it.get("id")),
                                     "code": it.get("code") or "",
                                     "title": it.get("title").replace("\xa0", " ").strip(),
                                     "description": it.get("description") or "",
                                     "card_url": (it.get("images") or {}).get("card") or "",
                                     "poster_url": portrait or (it.get("images") or {}).get("card") or "",
-                                    "show_type": (it.get("programme") or {}).get("showType") or "series"
+                                    "show_type": prog.get("showType") or it.get("show_type") or "series"
                                 })
                         if valid_items:
                             result_rows.append({

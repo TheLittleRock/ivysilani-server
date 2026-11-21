@@ -93,6 +93,10 @@
                     <i class="fa-solid fa-play text-xs"></i>
                     <span>Stremio</span>
                 </a>
+                <a href="/streamcube" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'streamcube' %}bg-indigo-600 text-white{% else %}text-indigo-300 hover:bg-indigo-950/50 hover:text-indigo-200{% endif %}">
+                    <i class="fa-solid fa-cube text-xs"></i>
+                    <span>StreamCube</span>
+                </a>
                 {% if user and user.is_admin %}
                 <a href="/admin" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'admin' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-users-gear text-xs"></i>
@@ -144,6 +148,10 @@
             <a href="/stremio" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'stremio' %}bg-purple-600 text-white{% else %}text-purple-300 hover:bg-purple-950/50 hover:text-purple-200{% endif %}">
                 <i class="fa-solid fa-play text-xs w-5"></i>
                 <span>Stremio Addon</span>
+            </a>
+            <a href="/streamcube" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'streamcube' %}bg-indigo-600 text-white{% else %}text-indigo-300 hover:bg-indigo-950/50 hover:text-indigo-200{% endif %}">
+                <i class="fa-solid fa-cube text-xs w-5"></i>
+                <span>StreamCube Addon</span>
             </a>
             {% if user and user.is_admin %}
             <a href="/admin" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'admin' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">

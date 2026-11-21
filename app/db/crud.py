@@ -295,7 +295,7 @@ def list_shows(
     show_type: Optional[str] = None,
     only_playable: bool = False,
     search: Optional[str] = None,
-    limit: int = 100,
+    limit: Optional[int] = 100,
     offset: int = 0
 ) -> List[Dict[str, Any]]:
     with get_db() as conn:
@@ -337,16 +337,83 @@ def list_shows(
             params.append(f"%{search}%")
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY updated_at DESC, title ASC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
+        if limit is not None and limit > 0:
+            query += " ORDER BY updated_at DESC, title ASC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset > 0:
+            query += " ORDER BY updated_at DESC, title ASC LIMIT -1 OFFSET ?"
+            params.append(offset)
+        else:
+            query += " ORDER BY updated_at DESC, title ASC"
         cursor.execute(query, params)
         return [dict(r) for r in cursor.fetchall()]
 
-def list_series(genre: Optional[str] = None, only_playable: bool = True, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def list_series(genre: Optional[str] = None, only_playable: bool = True, search: Optional[str] = None, limit: Optional[int] = 100, offset: int = 0) -> List[Dict[str, Any]]:
     return list_shows(genre=genre, show_type="series", only_playable=only_playable, search=search, limit=limit, offset=offset)
 
-def list_movies(genre: Optional[str] = None, only_playable: bool = True, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def list_movies(genre: Optional[str] = None, only_playable: bool = True, search: Optional[str] = None, limit: Optional[int] = 100, offset: int = 0) -> List[Dict[str, Any]]:
     return list_shows(genre=genre, show_type="movie", only_playable=only_playable, search=search, limit=limit, offset=offset)
+
+def list_playable_movies_with_idec(
+    genre: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
+    """Vrátí všechny přehratelné filmy v jednom optimalizovaném SQL dotazu rovnou s jejich prvním přehratelným IDEC.
+    Zamezuje tisícům dílčích SQL dotazů v cyklu, předchází CPU spike a 502 chybám reverse proxy.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        query = """
+        SELECT s.*, COALESCE(MIN(e.idec), s.id) as idec
+        FROM shows s
+        LEFT JOIN episodes e ON e.show_id = s.id AND e.is_playable = 1
+        """
+        params = []
+        conditions = ["s.show_type = 'movie'", "s.is_playable = 1"]
+
+        if genre:
+            g_low = genre.lower().strip()
+            if g_low in GENRE_STEM_MAP:
+                patterns = GENRE_STEM_MAP[g_low]
+                cond = " OR ".join(["s.genre LIKE ?" for _ in patterns])
+                conditions.append(f"({cond})")
+                params.extend(patterns)
+            elif g_low not in ["all", "vše", "vse", "přehled", "prehled", "filmy", "film"]:
+                p1 = f"%{genre}%"
+                p2 = f"%{genre.lower()}%"
+                patterns = list(dict.fromkeys([p1, p2]))
+                cond = " OR ".join(["s.genre LIKE ?" for _ in patterns])
+                conditions.append(f"({cond})")
+                params.extend(patterns)
+
+        query += " WHERE " + " AND ".join(conditions)
+        query += " GROUP BY s.id ORDER BY s.updated_at DESC, s.title ASC"
+        if limit is not None and limit > 0:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset > 0:
+            query += " LIMIT -1 OFFSET ?"
+            params.append(offset)
+
+        cursor.execute(query, params)
+        return [dict(r) for r in cursor.fetchall()]
+
+def safe_reset_catalog_data():
+    """Vymaže tabulky pořadů, epizod a kategorií pro čistý re-index z ČT,
+    ale bezpečně zachová uživatelské účty, hesla, globální nastavení, historii stahování a EPG."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM episodes")
+        cursor.execute("DELETE FROM shows")
+        cursor.execute("DELETE FROM categories")
+        cursor.execute("DELETE FROM show_categories")
+        cursor.execute("DELETE FROM app_settings WHERE key = 'homepage_blocks'")
+        conn.commit()
+        try:
+            cursor.execute("VACUUM")
+        except Exception:
+            pass
 
 def count_shows(
     genre: Optional[str] = None,

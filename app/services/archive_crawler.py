@@ -261,6 +261,9 @@ class ArchiveCrawler:
                                     is_playable=True,
                                     is_drm=False
                                 )
+                            else:
+                                # Film nemá přímý idec v tlačítku (např. akce PlayOnProgramme) - doindexujeme metadata
+                                series_to_index.append(slug or show_id)
                         else:
                             # Seriál zařadíme do fronty pro plné doindexování všech sérií a dílů
                             series_to_index.append(slug or show_id)
@@ -320,29 +323,35 @@ class ArchiveCrawler:
                 crud.save_homepage_blocks(hp_blocks)
                 for blk in hp_blocks:
                     for it in blk.get("items", []):
-                        it_id = it.get("id")
+                        it_id = str(it.get("id"))
                         it_code = it.get("code")
                         if it_id and it_id not in seen_shows:
                             seen_shows.add(it_id)
                             existing = crud.get_show_by_id(it_id)
-                            show_t = it.get("show_type") or "series"
-                            if not existing:
-                                crud.upsert_show(
-                                    show_id=it_id,
-                                    title=it["title"],
-                                    slug=it_code or it_id,
-                                    description=it.get("description", ""),
-                                    image_url=it.get("card_url", ""),
-                                    poster_url=it.get("poster_url", ""),
-                                    backdrop_url=it.get("card_url", ""),
-                                    logo_url="",
-                                    genre=blk.get("title", "Doporučujeme"),
-                                    year="",
-                                    show_type=show_t,
-                                    is_playable=True,
-                                    total_episodes=1
-                                )
-                                total_indexed += 1
+                            has_episodes = len(crud.get_episodes_by_show(it_id)) > 0 if existing else False
+                            if not existing or not has_episodes:
+                                # Skutečně plně zaindexujeme pořad včetně všech reálných epizod
+                                indexed_ok = await self.index_show(it_code or it_id)
+                                if indexed_ok:
+                                    total_indexed += 1
+                                elif not existing:
+                                    show_t = it.get("show_type") or "series"
+                                    crud.upsert_show(
+                                        show_id=it_id,
+                                        title=it["title"],
+                                        slug=it_code or it_id,
+                                        description=it.get("description", ""),
+                                        image_url=it.get("card_url", ""),
+                                        poster_url=it.get("poster_url", ""),
+                                        backdrop_url=it.get("card_url", ""),
+                                        logo_url="",
+                                        genre=blk.get("title", "Doporučujeme"),
+                                        year="",
+                                        show_type=show_t,
+                                        is_playable=True,
+                                        total_episodes=1
+                                    )
+                                    total_indexed += 1
         except Exception as e:
             logger.warning(f"Chyba při stahování homepage bloků: {e}")
 

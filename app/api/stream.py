@@ -25,9 +25,18 @@ async def proxy_subtitles(url: str = Query(...)):
             resp = await client.get(url)
             if resp.status_code != 200:
                 raise HTTPException(status_code=resp.status_code, detail="Failed to fetch subtitles from origin")
+            
+            vtt_text = resp.text
+            # Injekce X-TIMESTAMP-MAP pro HLS přehrávače (VLC, ExoPlayer, TiviMate),
+            # aby titulky byly korektně synchronizovány s MPEGTS časovou osou videa
+            if "X-TIMESTAMP-MAP" not in vtt_text and vtt_text.startswith("WEBVTT"):
+                lines = vtt_text.splitlines()
+                lines.insert(1, "X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0")
+                vtt_text = "\n".join(lines)
+
             return Response(
-                content=resp.content,
-                media_type="text/vtt",
+                content=vtt_text.encode("utf-8"),
+                media_type="text/vtt; charset=utf-8",
                 headers={
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",

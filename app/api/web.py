@@ -335,6 +335,29 @@ async def stremio_page(request: Request):
         "active_tab": "stremio"
     })
 
+@router.get("/streamcube", response_class=HTMLResponse)
+async def streamcube_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    base_url = get_base_url(request)
+    user_token = user.get("user_token")
+    if user_token:
+        manifest_url = f"{base_url}/streamcube/{user_token}/manifest.json"
+    else:
+        manifest_url = f"{base_url}/streamcube/manifest.json"
+    streamcube_link = f"streamcube://addon/install?url={urllib.parse.quote(manifest_url, safe='')}"
+
+    return templates.TemplateResponse(request=request, name="streamcube.html", context={
+        "user": user,
+        "is_default_password": is_using_default_password(user),
+        "base_url": base_url,
+        "manifest_url": manifest_url,
+        "streamcube_link": streamcube_link,
+        "active_tab": "streamcube"
+    })
+
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(
     request: Request,
@@ -419,6 +442,15 @@ async def admin_crawl_catalog(request: Request):
         raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
     started = archive_crawler.start_background_crawl(max_pages_per_category=5)
     return {"status": "started" if started else "already_running"}
+
+@router.post("/admin/reset-and-crawl")
+async def admin_reset_and_crawl(request: Request):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
+    crud.safe_reset_catalog_data()
+    started = archive_crawler.start_background_crawl(max_pages_per_category=5)
+    return {"status": "started" if started else "reset_done"}
 
 @router.get("/admin/crawl-status")
 async def admin_crawl_status(request: Request):

@@ -11,7 +11,7 @@ from app.services.image_proxy import image_proxy
 from app.services.tmdb_service import tmdb_service
 from app.api.xtream import CHANNEL_STREAM_MAP, CHANNEL_ID_TO_STREAM_ID
 
-router = APIRouter(prefix="/stremio")
+router = APIRouter()
 
 def get_base_url(request: Request) -> str:
     if settings.BASE_URL:
@@ -68,17 +68,28 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
         "id": "cz.thelittlerock.ivysilani",
         "version": "1.3.1",
         "name": "Česká televize (iVysílání)",
-        "description": "Kompletní filmový a seriálový archiv České televize (iVysílání) s českým dabingem a titulky.",
+        "description": "Kompletní filmový a seriálový archiv České televize (iVysílání), živé vysílání 14 stanic ČT, český dabing a titulky.",
         "logo": f"{base_url}/static/logos/ct1.png",
         "background": f"{base_url}/static/logos/ct1.png",
-        "resources": ["catalog", "meta", "stream"],
-        "types": ["series", "movie"],
+        "resources": ["catalog", "meta", "stream", "subtitles"],
+        "types": ["series", "movie", "tv"],
         "idPrefixes": ["ct_", "tt", "tmdb:"],
+        "streamcube": {
+            "manifestVersion": 1,
+            "addonType": "stream",
+            "capabilities": ["stream", "iptv", "epg"],
+            "minAppVersion": "2.0.0"
+        },
         "catalogs": [
+            {
+                "type": "tv",
+                "id": "ct_live",
+                "name": "Česká televize: Živé vysílání"
+            },
             {
                 "type": "series",
                 "id": "ct_featured",
-                "name": "iVysílání: Doporučujeme",
+                "name": "iVysílání: Doporučujeme (Seriály)",
                 "genres": [
                     "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
                     "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
@@ -100,7 +111,7 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
             {
                 "type": "series",
                 "id": "ct_series",
-                "name": "iVysílání: Seriály",
+                "name": "iVysílání: Všechny seriály",
                 "genres": [
                     "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
                     "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
@@ -119,8 +130,24 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
             },
             {
                 "type": "movie",
+                "id": "ct_featured_movie",
+                "name": "iVysílání: Doporučujeme (Filmy)",
+                "genres": [
+                    "Vše", "Filmové tipy", "iVysílání doporučuje", "Nejsledovanější", "Klasika"
+                ],
+                "extra": [
+                    {
+                        "name": "genre",
+                        "options": ["Vše", "Filmové tipy", "iVysílání doporučuje", "Nejsledovanější", "Klasika"]
+                    },
+                    {"name": "search"},
+                    {"name": "skip"}
+                ]
+            },
+            {
+                "type": "movie",
                 "id": "ct_movies",
-                "name": "iVysílání: Filmy",
+                "name": "iVysílání: Všechny filmy",
                 "genres": [
                     "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
                     "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
@@ -140,6 +167,30 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                     {"name": "search"},
                     {"name": "skip"}
                 ]
+            },
+            {
+                "type": "movie",
+                "id": "ct_movies_czech",
+                "name": "iVysílání: České filmy",
+                "extra": [{"name": "search"}, {"name": "skip"}]
+            },
+            {
+                "type": "movie",
+                "id": "ct_movies_foreign",
+                "name": "iVysílání: Zahraniční filmy",
+                "extra": [{"name": "search"}, {"name": "skip"}]
+            },
+            {
+                "type": "movie",
+                "id": "ct_movies_pohadky",
+                "name": "iVysílání: Pohádky",
+                "extra": [{"name": "search"}, {"name": "skip"}]
+            },
+            {
+                "type": "movie",
+                "id": "ct_movies_doc",
+                "name": "iVysílání: Dokumentární filmy",
+                "extra": [{"name": "search"}, {"name": "skip"}]
             },
             {
                 "type": "series",
@@ -192,6 +243,7 @@ async def stremio_manifest_default(request: Request):
 @router.get("/{token}/manifest.json")
 async def stremio_manifest_token(request: Request, token: str):
     return cors_response(build_manifest(get_base_url(request), token))
+
 
 # --- Catalog ---
 async def handle_catalog(request: Request, type: str, id: str, token: Optional[str] = None, extra: Optional[str] = None):
@@ -265,9 +317,50 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
     elif id == "ct_series":
         show_type = "series"
         shows = crud.list_shows(genre=genre_filter, show_type=show_type, only_playable=True, search=search, limit=60, offset=skip)
+    elif id == "ct_featured_movie":
+        hp_blocks = crud.get_homepage_blocks()
+        matching_items = []
+        for blk in hp_blocks:
+            b_title = blk.get("title", "")
+            if genre_filter and genre_filter.lower() in b_title.lower():
+                matching_items.extend(blk.get("items", []))
+            elif not genre_filter and any(w in b_title.lower() for w in ["film", "doporuč", "sledovan", "hit"]):
+                matching_items.extend(blk.get("items", []))
+
+        shows = []
+        seen_show_ids = set()
+        for it in matching_items:
+            it_id = it.get("id")
+            if it_id and it_id not in seen_show_ids:
+                seen_show_ids.add(it_id)
+                db_s = crud.get_show_by_id(it_id)
+                if db_s and db_s.get("show_type") == "movie":
+                    shows.append(db_s)
+                elif not db_s and it.get("show_type") == "movie":
+                    shows.append({
+                        "id": it_id,
+                        "title": it.get("title", ""),
+                        "description": it.get("description", ""),
+                        "image_url": it.get("card_url", ""),
+                        "poster_url": it.get("poster_url", ""),
+                        "backdrop_url": it.get("card_url", ""),
+                        "genre": genre_filter or "Filmové tipy",
+                        "show_type": "movie",
+                        "year": ""
+                    })
+        if not shows:
+            shows = crud.list_shows(show_type="movie", only_playable=True, limit=60, offset=skip)
     elif id == "ct_movies":
         show_type = "movie"
         shows = crud.list_shows(genre=genre_filter, show_type=show_type, only_playable=True, search=search, limit=60, offset=skip)
+    elif id == "ct_movies_czech":
+        shows = crud.list_shows(genre="České", show_type="movie", only_playable=True, search=search, limit=60, offset=skip)
+    elif id == "ct_movies_foreign":
+        shows = crud.list_shows(genre="Zahraniční", show_type="movie", only_playable=True, search=search, limit=60, offset=skip)
+    elif id == "ct_movies_pohadky":
+        shows = crud.list_shows(genre="Pohádky", show_type="movie", only_playable=True, search=search, limit=60, offset=skip)
+    elif id == "ct_movies_doc":
+        shows = crud.list_shows(genre="Dokument", show_type="movie", only_playable=True, search=search, limit=60, offset=skip)
     elif id == "ct_documentaries":
         if not genre_filter:
             genre_filter = "Dokument"
@@ -659,3 +752,93 @@ async def stremio_stream_default(request: Request, type: str, id: str):
 @router.get("/{token}/stream/{type}/{id}.json")
 async def stremio_stream_token(request: Request, token: str, type: str, id: str):
     return await handle_stream(request, type, id, token=token)
+
+# --- Subtitles ---
+async def handle_subtitles(request: Request, type: str, id: str, token: Optional[str] = None, extra: Optional[str] = None):
+    base_url = get_base_url(request)
+    id_clean = id.replace(".json", "")
+    
+    idec = None
+    if id_clean.startswith("ct_ep_"):
+        idec = id_clean.replace("ct_ep_", "")
+    elif id_clean.startswith("ct_show_") or (id_clean.startswith("ct_") and not id_clean.startswith("ct_live_")):
+        raw_id = id_clean.replace("ct_show_", "")
+        if raw_id.startswith("ct_"):
+            raw_id = raw_id[3:]
+        parts = raw_id.split(":")
+        show_id = parts[0]
+        has_ep_params = len(parts) > 1
+        season_num = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+        ep_num = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+
+        episodes = crud.get_episodes_by_show(show_id)
+        playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
+        if playable_episodes:
+            target_ep = None
+            if has_ep_params:
+                for ep in playable_episodes:
+                    if ep.get("season") == season_num and ep.get("episode_num") == ep_num:
+                        target_ep = ep
+                        break
+                if not target_ep:
+                    s_eps = [ep for ep in playable_episodes if ep.get("season") == season_num]
+                    if s_eps and 0 <= ep_num - 1 < len(s_eps):
+                        target_ep = s_eps[ep_num - 1]
+                if not target_ep:
+                    target_ep = playable_episodes[0]
+            else:
+                target_ep = playable_episodes[0]
+            if target_ep:
+                idec = target_ep["idec"]
+    elif id_clean.startswith("tt") or id_clean.startswith("tmdb:"):
+        parts = id_clean.split(":")
+        main_id = parts[0]
+        season_num = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+        ep_num = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+
+        show = None
+        if main_id.startswith("tt"):
+            show = crud.get_show_by_imdb_id(main_id)
+        elif main_id.startswith("tmdb:"):
+            show = crud.get_show_by_tmdb_id(main_id.replace("tmdb:", ""))
+
+        if show:
+            episodes = crud.get_episodes_by_show(show["id"], only_playable=True)
+            if episodes:
+                if show.get("show_type") == "movie":
+                    idec = episodes[0]["idec"]
+                else:
+                    for ep in episodes:
+                        if ep.get("season") == season_num and ep.get("episode_num") == ep_num:
+                            idec = ep["idec"]
+                            break
+                    if not idec:
+                        idec = episodes[0]["idec"]
+
+    subtitles = []
+    if idec:
+        try:
+            vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+            if vod_info and vod_info.get("subtitles"):
+                for idx, s in enumerate(vod_info["subtitles"], start=1):
+                    raw_sub = s.get("url", "")
+                    if raw_sub:
+                        subtitles.append({
+                            "id": f"cze_{idx}",
+                            "url": f"{base_url}/api/subtitles?url={urllib.parse.quote(raw_sub, safe='')}",
+                            "lang": "cze"
+                        })
+        except Exception as e:
+            logger.debug(f"Subtitles fetch failed for {idec}: {e}")
+
+    return cors_response({"subtitles": subtitles})
+
+@router.get("/subtitles/{type}/{id}.json")
+@router.get("/subtitles/{type}/{id}/{extra:path}")
+async def stremio_subtitles_default(request: Request, type: str, id: str, extra: Optional[str] = None):
+    return await handle_subtitles(request, type, id, token=None, extra=extra)
+
+@router.get("/{token}/subtitles/{type}/{id}.json")
+@router.get("/{token}/subtitles/{type}/{id}/{extra:path}")
+async def stremio_subtitles_token(request: Request, token: str, type: str, id: str, extra: Optional[str] = None):
+    return await handle_subtitles(request, type, id, token=token, extra=extra)

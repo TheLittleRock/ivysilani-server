@@ -44,6 +44,7 @@ async def scrape_ct_schedule_for_date(target_date: datetime.date, client: httpx.
         soup = BeautifulSoup(resp.text, "html.parser")
         total_saved = 0
         tz_prague = ZoneInfo("Europe/Prague")
+        channel_items: Dict[str, List[Dict[str, Any]]] = {}
 
         for block in soup.find_all(class_="programmeBlock"):
             classes = block.get("class", [])
@@ -55,10 +56,18 @@ async def scrape_ct_schedule_for_date(target_date: datetime.date, client: httpx.
             if not matched_channel:
                 continue
 
-            raw_items = []
+            # Určení časového bloku z rodičovských elementů (progTimeBlock06, 12, 16, 20, 24)
+            parent_classes = []
+            for p in block.parents:
+                parent_classes.extend(p.get("class", []))
+            is_night_block = "progTimeBlock24" in parent_classes or "progTimeBlock24" in classes
+
+            if matched_channel not in channel_items:
+                channel_items[matched_channel] = []
+
             for item in block.find_all("li", class_="programme"):
                 time_span = item.find(class_="progTime")
-                if not time_span:
+                if not time_span or not time_span.text.strip():
                     continue
                 time_str = time_span.text.strip()
                 title_a = item.find("a", class_="progTitle")
@@ -74,7 +83,19 @@ async def scrape_ct_schedule_for_date(target_date: datetime.date, client: httpx.
                 desc = desc_p.text.strip().replace(title, "").strip() if desc_p else ""
                 has_video = "has-video" in item.get("class", [])
 
-                raw_items.append({
+                try:
+                    parts = time_str.split(":")
+                    hour, minute = int(parts[0]), int(parts[1])
+                except Exception:
+                    continue
+
+                # Pořady vysílané po půlnoci (v progTimeBlock24 nebo hodina < 6) patří kalendářně na další den
+                prog_day = target_date + datetime.timedelta(days=1) if (is_night_block or hour < 6) else target_date
+                start_dt = datetime.datetime(prog_day.year, prog_day.month, prog_day.day, hour, minute, tzinfo=tz_prague)
+                start_ts = int(start_dt.timestamp())
+
+                channel_items[matched_channel].append({
+                    "start_ts": start_ts,
                     "time_str": time_str,
                     "title": title,
                     "idec": idec,
@@ -82,39 +103,26 @@ async def scrape_ct_schedule_for_date(target_date: datetime.date, client: httpx.
                     "has_video": has_video
                 })
 
-            # Výpočet start_ts a end_ts
-            for idx, prog in enumerate(raw_items):
-                try:
-                    parts = prog["time_str"].split(":")
-                    hour, minute = int(parts[0]), int(parts[1])
-                except Exception:
-                    continue
+        # Nyní pro každý kanál seřadíme programy vzestupně podle start_ts a spočítáme přesný end_ts
+        for ch_id, progs in channel_items.items():
+            unique_progs = {}
+            for p in progs:
+                unique_progs[p["start_ts"]] = p
+            sorted_progs = sorted(unique_progs.values(), key=lambda x: x["start_ts"])
 
-                # Pořady vysílané po půlnoci (před 05:00) patří kalendářně na další den
-                prog_day = target_date + datetime.timedelta(days=1) if hour < 5 else target_date
-                start_dt = datetime.datetime(prog_day.year, prog_day.month, prog_day.day, hour, minute, tzinfo=tz_prague)
-                start_ts = int(start_dt.timestamp())
-
-                # Konec je začátek dalšího pořadu, nebo +30 minut pro poslední
-                if idx + 1 < len(raw_items):
-                    try:
-                        n_parts = raw_items[idx + 1]["time_str"].split(":")
-                        n_h, n_m = int(n_parts[0]), int(n_parts[1])
-                        n_day = target_date + datetime.timedelta(days=1) if n_h < 5 else target_date
-                        end_dt = datetime.datetime(n_day.year, n_day.month, n_day.day, n_h, n_m, tzinfo=tz_prague)
-                        if end_dt <= start_dt:
-                            end_dt = start_dt + datetime.timedelta(minutes=30)
-                    except Exception:
-                        end_dt = start_dt + datetime.timedelta(minutes=30)
+            for idx, prog in enumerate(sorted_progs):
+                start_ts = prog["start_ts"]
+                if idx + 1 < len(sorted_progs):
+                    end_ts = sorted_progs[idx + 1]["start_ts"]
+                    if end_ts <= start_ts:
+                        end_ts = start_ts + 1800
                 else:
-                    end_dt = start_dt + datetime.timedelta(minutes=30)
+                    end_ts = start_ts + 1800
 
-                end_ts = int(end_dt.timestamp())
-                prog_id = f"{matched_channel}_{start_ts}"
-
+                prog_id = f"{ch_id}_{start_ts}"
                 crud.upsert_epg_programme(
                     prog_id=prog_id,
-                    channel_id=matched_channel,
+                    channel_id=ch_id,
                     date_str=date_str,
                     start_ts=start_ts,
                     end_ts=end_ts,

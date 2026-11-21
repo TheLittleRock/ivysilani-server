@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}StreamCube doplněk (Addon) - iVysílání Server{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+    <!-- Hlavní banner StreamCube -->
+    <div class="relative overflow-hidden bg-gradient-to-br from-indigo-950/80 via-slate-900 to-slate-950 border border-indigo-900/60 rounded-3xl p-6 sm:p-10 shadow-2xl">
+        <div class="relative z-10 max-w-2xl space-y-4">
+            <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
+                <i class="fa-solid fa-cube"></i>
+                <span>StreamCube Addon SDK v1.0 • Live TV &amp; VOD</span>
+            </div>
+            
+            <h1 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                Živé vysílání ČT &amp; Archiv v aplikaci <span class="text-indigo-400">StreamCube</span>
+            </h1>
+            
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Nativní doplněk pro novou moderní platformu <strong>StreamCube</strong>. Poskytuje živé vysílání všech 14 stanic České televize včetně EPG programu a kompletní archiv filmů i seriálů iVysílání v 1080p Full HD s českými titulky.
+            </p>
+
+            <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <a href="{{ streamcube_link }}" class="inline-flex items-center justify-center space-x-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm px-6 py-3.5 rounded-2xl shadow-xl shadow-indigo-900/40 transition active:scale-95">
+                    <i class="fa-solid fa-cube"></i>
+                    <span>Nainstalovat do StreamCube</span>
+                </a>
+                
+                <button onclick="copyManifestUrl(this)" class="inline-flex items-center justify-center space-x-2 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/80 font-semibold text-sm px-5 py-3.5 rounded-2xl transition">
+                    <i class="fa-regular fa-copy"></i>
+                    <span>Kopírovat Manifest URL</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="absolute right-4 -bottom-10 opacity-10 sm:opacity-20 pointer-events-none text-indigo-400 text-9xl">
+            <i class="fa-solid fa-satellite-dish"></i>
+        </div>
+    </div>
+
+    <!-- Adresa doplňku (Manifest URL) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Adresa manifestu doplňku pro StreamCube (URL)</h3>
+        <div class="flex items-center space-x-2">
+            <input id="manifest-input" type="text" readonly value="{{ manifest_url }}"
+                   class="flex-grow px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs sm:text-sm text-indigo-300 select-all focus:outline-none focus:border-indigo-500" />
+            <button onclick="copyManifestUrl(this)" class="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shrink-0">
+                Kopírovat
+            </button>
+        </div>
+        <p class="text-[11px] text-slate-400">
+            Ve StreamCube přejděte do <strong>Nastavení &rarr; Addony (Doplňky) &rarr; Přidat addon</strong> a vložte tuto URL adresu.
+        </p>
+    </div>
+
+    <!-- Vlastnosti a výhody doplňku -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-lg">
+            <div class="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-satellite-dish"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">14 stanic Live TV s EPG</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+                ČT1, ČT2, ČT24, ČT sport, ČT :D, ČT art a všech 8 stanic ČT sport Plus v reálném čase přímo v sekci Televize / Live TV.
+            </p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-lg">
+            <div class="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-film"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">Kompletní VOD Archiv</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+                Tisíce filmů a seriálů roztříděných do podkategorií (Krimi, Komedie, Pohádky, České, Zahraniční, Dokumenty) s okamžitým vyhledáváním.
+            </p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-lg">
+            <div class="w-10 h-10 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-closed-captioning"></i>
+            </div>
+            <h3 class="text-base font-bold text-white">Titulky &amp; 1080p HLS</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+                Nešifrované streamy v původní studiové kvalitě bez DRM komplikací s plnou synchronizací českých skrytých titulků.
+            </p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function copyManifestUrl(btn) {
+        const input = document.getElementById('manifest-input');
+        input.select();
+        input.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(input.value);
+
+        if (btn) {
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> <span>Zkopírováno!</span>';
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+            }, 2000);
+        }
+    }
+</script>
+{% endblock %}
