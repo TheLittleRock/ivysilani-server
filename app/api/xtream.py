@@ -148,6 +148,13 @@ def resolve_series_category_id(genre_str: str) -> str:
             return cat_id
     return "1"
 
+def to_int_id(val: Any, fallback: int = 1) -> int:
+    try:
+        s = str(val).split("-")[0].split("_")[0]
+        return int(s)
+    except (ValueError, TypeError):
+        return fallback
+
 # Mapování stream_id <-> kanál
 CHANNEL_STREAM_MAP = {
     1: "CH_1",
@@ -367,7 +374,7 @@ async def player_api(
                     "num": idx,
                     "name": m["title"],
                     "stream_type": "movie",
-                    "stream_id": idec,
+                    "stream_id": to_int_id(idec, idx),
                     "stream_icon": poster_url,
                     "rating": "8.0",
                     "rating_5based": 4.0,
@@ -402,7 +409,7 @@ async def player_api(
                     "duration": "01:00:00"
                 },
                 "movie_data": {
-                    "stream_id": idec,
+                    "stream_id": to_int_id(idec, 1),
                     "name": title,
                     "container_extension": "m3u8"
                 }
@@ -434,7 +441,7 @@ async def player_api(
                 series_list.append({
                     "num": idx,
                     "name": s["title"],
-                    "series_id": s["id"],
+                    "series_id": to_int_id(s["id"], idx),
                     "cover": cover_proxy,
                     "backdrop_path": [backdrop_proxy],
                     "plot": s.get("description", ""),
@@ -480,7 +487,7 @@ async def player_api(
                 ep_img_proxy = image_proxy.build_proxy_url(base_url, ep_img_raw)
 
                 episodes_by_season[sn_key].append({
-                    "id": ep["idec"],
+                    "id": to_int_id(ep["idec"], ep.get("episode_num", 1)),
                     "episode_num": ep.get("episode_num", 1),
                     "title": ep.get("title") or f"Epizoda {ep.get('episode_num', 1)}",
                     "container_extension": "m3u8",
