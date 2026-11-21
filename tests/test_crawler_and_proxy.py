@@ -5,6 +5,7 @@ from PIL import Image
 from app.db import crud
 from app.services.ct_service import clean_episode_title, parse_season_number, parse_episode_number
 from app.services.image_proxy import image_proxy
+from app.api.stream import shift_vtt_timestamps
 
 def test_clean_episode_title():
     # 1. Číslo s lomítkem (např. 1/13 Ztracený případ)
@@ -85,3 +86,23 @@ async def test_image_proxy_pillow_padding():
     # Ověříme adaptivní pozadí s barevným vzorkováním okrajů
     corner_pixel = padded_img.getpixel((5, 5))
     assert isinstance(corner_pixel, tuple) and len(corner_pixel) == 3
+
+def test_shift_vtt_timestamps():
+    sample_vtt = (
+        "WEBVTT\n\n"
+        "1\n"
+        "00:00:10.000 --> 00:00:15.500\n"
+        "První řádek titulků\n\n"
+        "2\n"
+        "01:59:58.500 --> 02:00:01.000\n"
+        "Druhý řádek přes hranici hodiny\n"
+    )
+    # Default shift +2.5 seconds
+    shifted = shift_vtt_timestamps(sample_vtt, 2.5)
+    assert "00:00:12.500 --> 00:00:18.000" in shifted
+    assert "02:00:01.000 --> 02:00:03.500" in shifted
+
+    # Negative offset (e.g. -5s) with floor at 0
+    sample_early = "00:00:02.000 --> 00:00:06.000"
+    shifted_early = shift_vtt_timestamps(sample_early, -5.0)
+    assert "00:00:00.000 --> 00:00:01.000" in shifted_early

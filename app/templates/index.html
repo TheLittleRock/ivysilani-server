@@ -115,9 +115,9 @@
 
         <!-- EPG & TV Program / Zpětné zhlédnutí (Catch-up) -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div class="border-b border-slate-800/80 pb-3 space-y-3">
                 <div class="flex items-center space-x-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold">
+                    <div class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold shrink-0">
                         <i class="fa-solid fa-calendar-days"></i>
                     </div>
                     <div>
@@ -130,7 +130,7 @@
                 </div>
 
                 <!-- Výběr dnů (Past 7 days to next 2 days) -->
-                <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 max-w-full custom-scrollbar" id="epg-date-tabs">
+                <div class="flex items-center space-x-1.5 overflow-x-auto pb-2 pt-1 max-w-full custom-scrollbar" id="epg-date-tabs">
                     <!-- Generováno dynamicky přes JS -->
                 </div>
             </div>
@@ -482,7 +482,7 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             const isSelected = (i === selectedDateOffset);
-            btn.className = `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+            btn.className = `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition ${
                 isSelected
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                     : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
@@ -495,6 +495,11 @@
                 loadSchedule(currentChannelId, selectedDateStr);
             };
             container.appendChild(btn);
+            if (isSelected) {
+                setTimeout(() => {
+                    btn.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+                }, 100);
+            }
         }
     }
 

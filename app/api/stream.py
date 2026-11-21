@@ -15,9 +15,45 @@ logger = logging.getLogger("stream_api")
 
 router = APIRouter(prefix="/api")
 
+def shift_vtt_timestamps(vtt_text: str, offset_seconds: float = 2.5) -> str:
+    """Posune všechny časové značky ve WebVTT o zadaný počet sekund.
+    Kladná hodnota posouvá titulky dopředu v čase (zpožďuje jejich zobrazení,
+    pokud se zobrazují moc brzy).
+    """
+    def parse_time(t_str: str) -> float:
+        t_str = t_str.strip().replace(",", ".")
+        parts = t_str.split(":")
+        if len(parts) == 3:
+            h, m, s = parts
+            return int(h) * 3600 + int(m) * 60 + float(s)
+        elif len(parts) == 2:
+            m, s = parts
+            return int(m) * 60 + float(s)
+        return float(parts[0])
+
+    def format_time(seconds: float) -> str:
+        if seconds < 0:
+            seconds = 0.0
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = seconds % 60
+        return f"{h:02d}:{m:02d}:{s:06.3f}"
+
+    pattern = re.compile(r"((?:\d{2}:)?\d{2}:\d{2}[\.,]\d{3})\s+-->\s+((?:\d{2}:)?\d{2}:\d{2}[\.,]\d{3})")
+
+    def replacer(match):
+        start_str, end_str = match.group(1), match.group(2)
+        start_sec = parse_time(start_str) + offset_seconds
+        end_sec = parse_time(end_str) + offset_seconds
+        return f"{format_time(start_sec)} --> {format_time(end_sec)}"
+
+    return pattern.sub(replacer, vtt_text)
+
 @router.api_route("/subtitles", methods=["GET", "HEAD"])
-async def proxy_subtitles(url: str = Query(...)):
-    """Stáhne a přepošle WebVTT titulky z CDN České televize s CORS hlavičkou."""
+async def proxy_subtitles(url: str = Query(...), offset: Optional[float] = Query(None)):
+    """Stáhne a přepošle WebVTT titulky z CDN České televize s CORS hlavičkou
+    a automatickým vyrovnáním časového posunu (defaultně +2.5s zpoždění pro dokonalou synchronizaci s videem).
+    """
     if not url.startswith("http://") and not url.startswith("https://"):
         raise HTTPException(status_code=400, detail="Invalid subtitle URL")
     try:
@@ -27,6 +63,12 @@ async def proxy_subtitles(url: str = Query(...)):
                 raise HTTPException(status_code=resp.status_code, detail="Failed to fetch subtitles from origin")
             
             vtt_text = resp.text
+
+            # Časový posun titulků: ČT WebVTT soubory mívají náskok 2-3s vůči webovému VOD videu
+            use_offset = offset if offset is not None else settings.SUBTITLE_OFFSET_SECONDS
+            if use_offset != 0:
+                vtt_text = shift_vtt_timestamps(vtt_text, use_offset)
+
             # Injekce X-TIMESTAMP-MAP pro HLS přehrávače (VLC, ExoPlayer, TiviMate),
             # aby titulky byly korektně synchronizovány s MPEGTS časovou osou videa
             if "X-TIMESTAMP-MAP" not in vtt_text and vtt_text.startswith("WEBVTT"):

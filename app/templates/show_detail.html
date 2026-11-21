@@ -156,12 +156,12 @@
 
             <!-- Přepínač sérií (Tabs) -->
             {% if sorted_seasons|length > 1 %}
-            <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 custom-scrollbar text-xs">
-                <button onclick="filterSeason('all')" id="tab-season-all" class="season-tab px-3.5 py-1.5 rounded-xl font-semibold transition bg-blue-600 text-white">
+            <div class="flex items-center space-x-1.5 overflow-x-auto pb-1.5 custom-scrollbar text-xs">
+                <button onclick="filterSeason('all')" id="tab-season-all" class="season-tab px-3.5 py-1.5 rounded-xl font-semibold transition bg-blue-600 text-white shrink-0">
                     Všechny díly
                 </button>
                 {% for sn in sorted_seasons %}
-                <button onclick="filterSeason('{{ sn }}')" id="tab-season-{{ sn }}" class="season-tab px-3.5 py-1.5 rounded-xl font-semibold transition bg-slate-800 text-slate-300 hover:bg-slate-700">
+                <button onclick="filterSeason('{{ sn }}')" id="tab-season-{{ sn }}" class="season-tab px-3.5 py-1.5 rounded-xl font-semibold transition bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">
                     {{ sn }}. řada
                 </button>
                 {% endfor %}

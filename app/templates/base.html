@@ -38,6 +38,56 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <style>
+        /* Modern dark custom scrollbars for entire application */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(59, 130, 246, 0.45) rgba(15, 23, 42, 0.7);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.7);
+            border-radius: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.45);
+            border-radius: 8px;
+            border: 1px solid rgba(15, 23, 42, 0.5);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.75);
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+
+        /* Specific classes for custom scrollbars */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 9999px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.45);
+            border-radius: 9999px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.8);
+        }
+
         .video-container {
             position: relative;
             width: 100%;
@@ -62,44 +112,44 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-blue-600 selection:text-white">
 
     <!-- Horní navigace -->
-    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <a href="/" class="flex items-center space-x-2 text-xl font-bold tracking-tight text-white hover:text-blue-400 transition">
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+            <div class="flex items-center space-x-2.5 shrink-0">
+                <a href="/" class="flex items-center space-x-2 text-lg sm:text-xl font-bold tracking-tight text-white hover:text-blue-400 transition shrink-0">
                     <img src="/static/favicon.svg" alt="ČT" class="w-7 h-7 object-contain" />
                     <span>iVysílání <span class="text-blue-500 text-sm font-semibold">Server</span></span>
                     <span class="hidden sm:inline-block bg-blue-600/20 text-blue-400 border border-blue-500/30 text-[10px] px-1.5 py-0.5 rounded-full font-mono font-normal">v{{ app_version }}</span>
                 </a>
             </div>
 
-            <!-- Navigační menu -->
-            <nav class="hidden md:flex items-center space-x-1">
-                <a href="/" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'live' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+            <!-- Navigační menu desktop -->
+            <nav class="hidden lg:flex items-center gap-1 xl:gap-1.5">
+                <a href="/" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'live' %}bg-blue-600 text-white shadow-sm shadow-blue-500/20{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-satellite-dish text-xs"></i>
-                    <span>Živě (Live TV)</span>
+                    <span>Živě</span>
                 </a>
-                <a href="/archive" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'archive' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <a href="/archive" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'archive' %}bg-blue-600 text-white shadow-sm shadow-blue-500/20{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-film text-xs"></i>
-                    <span>Archiv (VOD)</span>
+                    <span>Archiv</span>
                 </a>
-                <a href="/downloads" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'downloads' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <a href="/downloads" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'downloads' %}bg-blue-600 text-white shadow-sm shadow-blue-500/20{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-download text-xs"></i>
                     <span>Stahování</span>
                 </a>
-                <a href="/xtream" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'xtream' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <a href="/xtream" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'xtream' %}bg-blue-600 text-white shadow-sm shadow-blue-500/20{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-tv text-xs"></i>
-                    <span>IPTV (M3U & EPG)</span>
+                    <span>IPTV / M3U</span>
                 </a>
-                <a href="/stremio" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'stremio' %}bg-purple-600 text-white{% else %}text-purple-300 hover:bg-purple-950/50 hover:text-purple-200{% endif %}">
+                <a href="/stremio" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'stremio' %}bg-purple-600 text-white shadow-sm shadow-purple-500/20{% else %}text-purple-300 hover:bg-purple-950/50 hover:text-purple-200{% endif %}">
                     <i class="fa-solid fa-play text-xs"></i>
                     <span>Stremio</span>
                 </a>
-                <a href="/streamcube" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'streamcube' %}bg-indigo-600 text-white{% else %}text-indigo-300 hover:bg-indigo-950/50 hover:text-indigo-200{% endif %}">
+                <a href="/streamcube" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'streamcube' %}bg-indigo-600 text-white shadow-sm shadow-indigo-500/20{% else %}text-indigo-300 hover:bg-indigo-950/50 hover:text-indigo-200{% endif %}">
                     <i class="fa-solid fa-cube text-xs"></i>
                     <span>StreamCube</span>
                 </a>
                 {% if user and user.is_admin %}
-                <a href="/admin" class="px-3 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-1.5 {% if active_tab == 'admin' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <a href="/admin" class="px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 transition flex items-center space-x-1.5 {% if active_tab == 'admin' %}bg-blue-600 text-white shadow-sm shadow-blue-500/20{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                     <i class="fa-solid fa-users-gear text-xs"></i>
                     <span>Administrace</span>
                 </a>
@@ -107,13 +157,14 @@
             </nav>
 
             <!-- Uživatelský profil / Odhlášení & Mobile menu button -->
-            <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="flex items-center space-x-2 shrink-0">
                 {% if user %}
-                <div class="text-xs text-slate-400 hidden sm:block">
-                    Přihlášen: <span class="font-semibold text-white">{{ user.username }}</span>
-                </div>
-                <a href="/logout" class="hidden sm:inline-block text-xs bg-slate-800 hover:bg-red-900/60 text-slate-300 hover:text-red-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-                    Odhlásit
+                <span class="text-xs text-slate-400 hidden xl:inline-block">
+                    Přihlášen: <strong class="text-white">{{ user.username }}</strong>
+                </span>
+                <a href="/logout" class="hidden sm:inline-flex items-center text-xs bg-slate-800 hover:bg-red-900/60 text-slate-300 hover:text-red-200 px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="Odhlásit se">
+                    <i class="fa-solid fa-arrow-right-from-bracket mr-1.5 text-[10px]"></i>
+                    <span>Odhlásit</span>
                 </a>
                 {% else %}
                 <a href="/login" class="hidden sm:inline-block text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-3.5 py-1.5 rounded-lg shadow-sm transition">
@@ -121,15 +172,15 @@
                 </a>
                 {% endif %}
 
-                <!-- Hamburger button for mobile -->
-                <button id="mobile-menu-btn" type="button" class="md:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition focus:outline-none" aria-label="Otevřít menu">
+                <!-- Hamburger button for mobile / tablet -->
+                <button id="mobile-menu-btn" type="button" class="lg:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition focus:outline-none" aria-label="Otevřít menu">
                     <i class="fa-solid fa-bars text-xl" id="menu-icon"></i>
                 </button>
             </div>
         </div>
 
         <!-- Mobile Navigation Drawer -->
-        <div id="mobile-menu" class="hidden md:hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur px-4 pt-3 pb-4 space-y-1.5">
+        <div id="mobile-menu" class="hidden lg:hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur px-4 pt-3 pb-4 space-y-1.5">
             <a href="/" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'live' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
                 <i class="fa-solid fa-satellite-dish text-xs w-5"></i>
                 <span>Živě (Live TV)</span>

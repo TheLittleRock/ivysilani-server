@@ -9,6 +9,15 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 ## [2.2.0] - 2026-11-22
 
 ### Opraveno (Fixed)
+- **Synchronizace titulků (+2.5s Audio/Video Sync):**
+  - Vyřešen problém, kdy byly české WebVTT titulky u pořadů o 2–3 sekundy napřed oproti mluvenému slovu (dáno leader offsetem ve videu ČT).
+  - Implementována funkce `shift_vtt_timestamps()` s výchozím posunem `SUBTITLE_OFFSET_SECONDS = 2.5` na proxy endpointu `/api/subtitles`.
+- **Oprava rozpadlého horního navigačního panelu:**
+  - Upraven layout a zkráceny popisky navigačních položek (přidáno `whitespace-nowrap shrink-0` a přepnutí responzivního breakpointu na `lg:`). Tlačítka se již nezalamují do dvou řádků ani na menších monitorech a noteboocích (1024–1366 px).
+- **Moderní tmavé scrollbary pro celou aplikaci:**
+  - Odstraněny nevzhledné nativní bílé posuvníky prohlížeče se šipkami v seznamu televizních stanic, výběru dnů v programu a v seznamu EPG.
+  - Zavedeny stylové tenké poloprůhledné posuvníky (`.custom-scrollbar` a globální `::-webkit-scrollbar` / `scrollbar-width: thin`) ladící s tmavým designem aplikace.
+  - Lišta s výběrem dnů TV programu byla přesunuta na samostatný plnošířkový řádek pro pohodlné procházení.
 - **Xtream Codes VOD/Series ID Typecast (Go Client Compatibility):**
   - Opravena kritická chyba `json: cannot unmarshal string into Go struct field VodStream.stream_id of type int`, která způsobovala `HTTP 502 Bad Gateway` v Go klientech (např. `xtream-gui-linux` / crawler).
   - Všechna `stream_id` a `series_id` v `get_vod_streams`, `get_series`, `get_vod_info` i `get_series_info` jsou nyní přetypována na celočíselný `int` přes bezpečnou funkci `to_int_id()`.

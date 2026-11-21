@@ -94,6 +94,12 @@ flowchart TD
 - Funkce `to_int_id()` garantuje, že všechny VOD a seriálové položky posílají celočíselná ID.
 - Server používá `GZipMiddleware`, čímž zmenšuje velikost katalogu z 570 KB na ~45 KB a předchází 502 chybám z důvodu přetečení proxy bufferu.
 
+### E. Synchronizace WebVTT titulků (`app/api/stream.py`)
+- WebVTT soubory z CDN České televize začínají časovou osu od `00:00:00.000`, zatímco VOD HLS TS segmenty mají video leader / pre-roll (první PTS ~183600 ticks = ~2.04s - 2.5s).
+- Z toho důvodu byly titulky zobrazeny o 2 až 3 sekundy dříve, než herec promluvil.
+- Endpoint `/api/subtitles` má parametr `offset` (výchozí hodnota `settings.SUBTITLE_OFFSET_SECONDS = 2.5`), který přes funkci `shift_vtt_timestamps()` automaticky posouvá všechny časové značky o +2.5s dopředu v čase, čímž zajišťuje dokonalou synchronizaci zvuku a textu ve všech přehrávačích.
+- Pro HLS přehrávače (VLC, TiviMate, ExoPlayer) server automaticky injektuje hlavičku `X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0`.
+
 ---
 
 ## 5. Důležité zvláštnosti a pasti (Known Quirks & Gotchas)
