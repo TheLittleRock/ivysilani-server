@@ -1,9 +1,10 @@
+import re
 import urllib.parse
 import logging
 from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, Response, Query
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 import httpx
 from app.services.ct_service import ct_service
 from app.services.drm_proxy import drm_session_manager
@@ -54,33 +55,142 @@ async def get_image_proxy(url: str, pad: Optional[str] = Query(None)):
 
 @router.get("/stream/live/{channel_id}")
 async def get_live_stream_info(request: Request, channel_id: str):
-    data = await ct_service.resolve_live_stream(channel_id, allow_drm=True)
+    data = await ct_service.resolve_live_stream(channel_id, allow_drm=False)
     if not data:
         raise HTTPException(status_code=404, detail="Live stream not found")
 
+    hls_url = data.get("hls_url") or data.get("url")
+    return {
+        "channel_id": channel_id,
+        "title": data.get("title", ""),
+        "is_drm": False,
+        "manifest_type": "hls",
+        "url": hls_url,
+        "hls_url": hls_url,
+        "qualities": data.get("qualities", []),
+        "audio_tracks": data.get("audio_tracks", []),
+        "subtitles": data.get("subtitles", [])
+    }
+
+@router.api_route("/hls/master/{idec}.m3u8", methods=["GET", "HEAD"])
+async def get_hls_master_playlist(
+    request: Request,
+    idec: str,
+    quality: Optional[str] = Query(None)
+):
+    """Dynamicky přepíše HLS master playlist: vloží české titulky a volitelně vyfiltruje požadovanou kvalitu."""
+    data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+    if not data or not data.get("hls_url"):
+        raise HTTPException(status_code=404, detail="HLS stream not available")
+
+    hls_master_url = data["hls_url"]
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(hls_master_url)
+            if resp.status_code != 200:
+                return RedirectResponse(url=hls_master_url, status_code=302)
+
+            master_text = resp.text
+            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+            forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+            base_url = f"{forwarded_proto}://{forwarded_host}"
+
+            has_subtitles = bool(data.get("subtitles"))
+            sub_line = f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Čeština",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="cs",URI="{base_url}/api/hls/subtitles/{idec}.m3u8"'
+
+            lines = master_text.splitlines()
+            out_lines = []
+            sub_injected = False
+            skip_next_stream = False
+
+            for line in lines:
+                if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+                    out_lines.append(line)
+                    if has_subtitles and not sub_injected:
+                        out_lines.append(sub_line)
+                        sub_injected = True
+                elif line.startswith("#EXT-X-STREAM-INF:"):
+                    bw_match = re.search(r"BANDWIDTH=(\d+)", line)
+                    bw = int(bw_match.group(1)) if bw_match else 0
+                    keep = True
+                    if quality == "1080p" and bw < 5000000:
+                        keep = False
+                    elif quality == "720p" and not (2500000 <= bw <= 4500000):
+                        keep = False
+                    elif quality == "576p" and not (1500000 <= bw <= 2500000):
+                        keep = False
+
+                    if keep:
+                        if has_subtitles and 'SUBTITLES=' not in line:
+                            line += ',SUBTITLES="subs"'
+                        out_lines.append(line)
+                        skip_next_stream = False
+                    else:
+                        skip_next_stream = True
+                elif skip_next_stream:
+                    skip_next_stream = False
+                else:
+                    out_lines.append(line)
+
+            # Fallback pokud filtr kvality nic nezanechal
+            if not any(l.startswith("#EXT-X-STREAM-INF:") for l in out_lines):
+                out_lines = []
+                for line in lines:
+                    if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+                        out_lines.append(line)
+                        if has_subtitles and not sub_injected:
+                            out_lines.append(sub_line)
+                            sub_injected = True
+                    elif line.startswith("#EXT-X-STREAM-INF:"):
+                        if has_subtitles and 'SUBTITLES=' not in line:
+                            line += ',SUBTITLES="subs"'
+                        out_lines.append(line)
+                    else:
+                        out_lines.append(line)
+
+            return Response(
+                content="\n".join(out_lines),
+                media_type="application/vnd.apple.mpegurl",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                    "Cache-Control": "public, max-age=1800"
+                }
+            )
+    except Exception as e:
+        logger.warning(f"Error rewriting HLS master playlist for {idec}: {e}")
+        return RedirectResponse(url=hls_master_url, status_code=302)
+
+@router.api_route("/hls/subtitles/{idec}.m3u8", methods=["GET", "HEAD"])
+async def get_hls_subtitle_playlist(request: Request, idec: str):
+    """Vrátí HLS WebVTT subtitle playlist pro IPTV přehrávače (TiviMate/VLC)."""
+    data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+    if not data or not data.get("subtitles"):
+        raise HTTPException(status_code=404, detail="Subtitles not available")
+
+    vtt_url = data["subtitles"][0]["url"]
     forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
     base_url = f"{forwarded_proto}://{forwarded_host}"
+    proxy_sub_url = f"{base_url}/api/subtitles?url={urllib.parse.quote(vtt_url, safe='')}"
 
-    if data.get("is_drm") and data.get("dash_url"):
-        session_id = drm_session_manager.create_session(
-            source_url=data["dash_url"],
-            user_agent=settings.USER_AGENT,
-            base_url=base_url
-        )
-        return {
-            "channel_id": channel_id,
-            "title": data.get("title", ""),
-            "is_drm": True,
-            "manifest_type": "mpd",
-            "url": f"/api/drm/{session_id}/manifest.mpd",
-            "hls_url": data.get("hls_url"),
-            "license_url": "https://ivys-wvproxy.o2tv.cz/license?access_token=public",
-            "qualities": data.get("qualities", []),
-            "audio_tracks": data.get("audio_tracks", [])
+    hls_vtt = f"""#EXTM3U
+#EXT-X-TARGETDURATION:7200
+#EXT-X-VERSION:3
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:7200.0,
+{proxy_sub_url}
+#EXT-X-ENDLIST
+"""
+    return Response(
+        content=hls_vtt,
+        media_type="application/vnd.apple.mpegurl",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Cache-Control": "public, max-age=86400"
         }
-
-    return data
+    )
 
 @router.get("/stream/vod/{idec}")
 async def get_vod_stream_info(request: Request, idec: str):

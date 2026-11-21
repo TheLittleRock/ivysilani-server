@@ -85,8 +85,11 @@
                     <div>
                         <div class="flex items-center space-x-2">
                             <h2 id="player-channel-title" class="text-lg font-bold text-white tracking-wide">ČT1</h2>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
-                                <i class="fa-solid fa-circle text-[5px] mr-1"></i> ŽIVĚ
+                            <span id="player-live-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
+                                <i class="fa-solid fa-circle text-[5px] mr-1 animate-pulse"></i> ŽIVĚ
+                            </span>
+                            <span id="player-catchup-badge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-950/80 text-blue-300 border border-blue-700">
+                                <i class="fa-solid fa-clock-rotate-left text-[9px] mr-1 text-blue-400"></i> ZÁZNAM (CATCH-UP)
                             </span>
                             <span id="player-drm-badge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
                                 <i class="fa-solid fa-shield text-[8px] mr-1"></i> Widevine
@@ -98,11 +101,49 @@
                 </div>
 
                 <div class="flex items-center space-x-2 self-end sm:self-auto">
+                    <button id="player-back-to-live-btn" onclick="backToLive()" class="hidden px-3 py-1.5 text-xs text-red-300 hover:text-white bg-red-950/80 hover:bg-red-900 rounded-lg transition flex items-center space-x-1.5 border border-red-800/80 shadow" title="Vrátit se na živé vysílání">
+                        <i class="fa-solid fa-satellite-dish text-xs"></i>
+                        <span>Zpět na ŽIVĚ</span>
+                    </button>
                     <button onclick="reloadCurrentStream()" class="px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition flex items-center space-x-1.5 border border-slate-700/80 shadow" title="Znovu načíst stream">
                         <i class="fa-solid fa-rotate-right text-xs"></i>
                         <span>Obnovit</span>
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- EPG & TV Program / Zpětné zhlédnutí (Catch-up) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-calendar-days"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                            <span>TV Program &amp; Zpětné zhlédnutí</span>
+                            <span id="epg-active-channel-name" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-blue-400 border border-slate-700">ČT1</span>
+                        </h3>
+                        <p class="text-xs text-slate-400">Archiv vysílání až 7 dní zpět – kliknutím na pořad spustíte přehrávání ze záznamu</p>
+                    </div>
+                </div>
+
+                <!-- Výběr dnů (Past 7 days to next 2 days) -->
+                <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 max-w-full custom-scrollbar" id="epg-date-tabs">
+                    <!-- Generováno dynamicky přes JS -->
+                </div>
+            </div>
+
+            <!-- Indikátor načítání TV programu -->
+            <div id="epg-schedule-loading" class="py-8 text-center text-slate-400 hidden">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i>
+                <p class="text-xs">Načítám TV program...</p>
+            </div>
+
+            <!-- Seznam pořadů -->
+            <div id="epg-schedule-list" class="space-y-2 max-h-[520px] overflow-y-auto pr-1.5 custom-scrollbar">
+                <!-- Položky se vykreslí dynamicky -->
             </div>
         </div>
 
@@ -175,10 +216,28 @@
 <script>
     let player = null;
     let currentChannelId = 'CH_1';
+    let activeChannelName = 'ČT1';
+    let activeChannelLogo = '/static/logos/ct1.png';
+    let activeChannelDesc = 'Hlavní rodinný program České televize';
+    let activeCurrentProg = '';
+    let selectedDateOffset = 0;
+    let selectedDateStr = '';
     let videoEl = null;
+
+    const dayNames = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
+
+    function getFormattedDate(d) {
+        const dd = ('0' + d.getDate()).slice(-2);
+        const mm = ('0' + (d.getMonth() + 1)).slice(-2);
+        const yyyy = d.getFullYear();
+        return `${dd}.${mm}.${yyyy}`;
+    }
 
     async function initPlayer() {
         videoEl = document.getElementById('ct-video');
+
+        selectedDateStr = getFormattedDate(new Date());
+        generateDateTabs();
 
         // Shaka polyfills
         if (window.shaka) {
@@ -234,6 +293,18 @@
 
     async function playChannel(channelId, name, logo, desc, currentProg) {
         currentChannelId = channelId;
+        activeChannelName = name;
+        activeChannelLogo = logo;
+        activeChannelDesc = desc;
+        activeCurrentProg = currentProg || '';
+
+        // Reset stavu přehrávání živě / záznam
+        const liveBadge = document.getElementById('player-live-badge');
+        const catchupBadge = document.getElementById('player-catchup-badge');
+        const backToLiveBtn = document.getElementById('player-back-to-live-btn');
+        if (liveBadge) liveBadge.classList.remove('hidden');
+        if (catchupBadge) catchupBadge.classList.add('hidden');
+        if (backToLiveBtn) backToLiveBtn.classList.add('hidden');
 
         // Aktualizovat aktivní tlačítko v seznamu
         document.querySelectorAll('.channel-btn').forEach(b => {
@@ -254,7 +325,13 @@
             document.getElementById('player-current-program').textContent = 'Živé vysílání stanice ' + name;
         }
 
+        const activeChannelNameEl = document.getElementById('epg-active-channel-name');
+        if (activeChannelNameEl) activeChannelNameEl.textContent = name;
+
         document.getElementById('video-spinner').classList.remove('hidden');
+
+        // Načíst program pro tento kanál
+        loadSchedule(channelId, selectedDateStr);
 
         try {
             const resp = await fetch(`/api/stream/live/${channelId}`);
@@ -276,14 +353,20 @@
             const streamUrl = data.url || data.hls_url;
 
             if (player) {
-                await player.load(streamUrl);
-                updateTracksInUI();
-                videoEl.play().catch(e => {
-                    console.log('Autoplay requires mute:', e);
-                    videoEl.muted = true;
-                    updateVolumeIcon(0);
+                try {
+                    await player.load(streamUrl);
+                    updateTracksInUI();
+                    videoEl.play().catch(e => {
+                        console.log('Autoplay requires mute:', e);
+                        videoEl.muted = true;
+                        updateVolumeIcon(0);
+                        videoEl.play();
+                    });
+                } catch (shakaErr) {
+                    console.warn('Shaka load failed, trying native src:', shakaErr);
+                    videoEl.src = streamUrl;
                     videoEl.play();
-                });
+                }
             } else {
                 // Nativní HLS fallback
                 videoEl.src = streamUrl;
@@ -292,6 +375,222 @@
         } catch (e) {
             console.error('Chyba přehrávače:', e);
             document.getElementById('video-spinner').classList.add('hidden');
+        }
+    }
+
+    async function playCatchup(idec, title, startTs, endTs) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        document.getElementById('video-spinner').classList.remove('hidden');
+
+        // Aktualizovat záhlaví
+        document.getElementById('player-channel-title').textContent = activeChannelName + ' (Záznam)';
+        document.getElementById('player-current-program').textContent = 'Záznam: ' + title;
+
+        const liveBadge = document.getElementById('player-live-badge');
+        const catchupBadge = document.getElementById('player-catchup-badge');
+        const backToLiveBtn = document.getElementById('player-back-to-live-btn');
+        if (liveBadge) liveBadge.classList.add('hidden');
+        if (catchupBadge) catchupBadge.classList.remove('hidden');
+        if (backToLiveBtn) backToLiveBtn.classList.remove('hidden');
+
+        try {
+            let streamUrl = '';
+            if (idec) {
+                try {
+                    const resp = await fetch(`/api/stream/vod/${idec}`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        streamUrl = data.url || data.hls_url;
+                        if (data.is_drm && player) {
+                            player.configure({
+                                drm: {
+                                    servers: {
+                                        'com.widevine.alpha': data.license_url || 'https://ivys-wvproxy.o2tv.cz/license?access_token=public'
+                                    }
+                                }
+                            });
+                        }
+                    }
+                } catch (vodErr) {
+                    console.warn('VOD fetch failed, checking timeshift fallback:', vodErr);
+                }
+            }
+
+            // Pokud VOD není dostupný, použijeme timeshift
+            if (!streamUrl && startTs && endTs) {
+                const duration = Math.max(60, endTs - startTs);
+                const chNum = currentChannelId.replace('CH_', '');
+                streamUrl = `/streaming/timeshift.php?stream=${chNum}&start=${startTs}&duration=${duration}`;
+            }
+
+            if (!streamUrl) {
+                alert('Tento pořad bohužel nemá dostupný záznam k přehrání.');
+                document.getElementById('video-spinner').classList.add('hidden');
+                return;
+            }
+
+            if (player) {
+                try {
+                    await player.load(streamUrl);
+                    updateTracksInUI();
+                    videoEl.play().catch(e => {
+                        console.log('Autoplay muted:', e);
+                        videoEl.muted = true;
+                        updateVolumeIcon(0);
+                        videoEl.play();
+                    });
+                } catch (shakaErr) {
+                    console.warn('Shaka load failed, trying native src:', shakaErr);
+                    videoEl.src = streamUrl;
+                    videoEl.play();
+                }
+            } else {
+                videoEl.src = streamUrl;
+                videoEl.play();
+            }
+        } catch (e) {
+            console.error('Chyba při přehrávání záznamu:', e);
+            alert('Nepodařilo se spustit přehrávání záznamu.');
+        } finally {
+            document.getElementById('video-spinner').classList.add('hidden');
+        }
+    }
+
+    function backToLive() {
+        playChannel(currentChannelId, activeChannelName, activeChannelLogo, activeChannelDesc, activeCurrentProg);
+    }
+
+    function generateDateTabs() {
+        const container = document.getElementById('epg-date-tabs');
+        if (!container) return;
+        container.innerHTML = '';
+
+        const now = new Date();
+        for (let i = -7; i <= 2; i++) {
+            const d = new Date();
+            d.setDate(now.getDate() + i);
+            const dateStr = getFormattedDate(d);
+            const dayName = dayNames[d.getDay()];
+            const dayNum = ('0' + d.getDate()).slice(-2);
+            const monthNum = ('0' + (d.getMonth() + 1)).slice(-2);
+
+            let label = `${dayName} ${dayNum}.${monthNum}.`;
+            if (i === 0) label = `Dnes (${dayNum}.${monthNum}.)`;
+            else if (i === -1) label = `Včera (${dayNum}.${monthNum}.)`;
+            else if (i === 1) label = `Zítra (${dayNum}.${monthNum}.)`;
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            const isSelected = (i === selectedDateOffset);
+            btn.className = `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                isSelected
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+            }`;
+            btn.textContent = label;
+            btn.onclick = () => {
+                selectedDateOffset = i;
+                selectedDateStr = dateStr;
+                generateDateTabs();
+                loadSchedule(currentChannelId, selectedDateStr);
+            };
+            container.appendChild(btn);
+        }
+    }
+
+    async function loadSchedule(channelId, dateStr) {
+        const listEl = document.getElementById('epg-schedule-list');
+        const loadingEl = document.getElementById('epg-schedule-loading');
+        if (!listEl) return;
+
+        listEl.innerHTML = '';
+        if (loadingEl) loadingEl.classList.remove('hidden');
+
+        try {
+            const resp = await fetch(`/api/epg/schedule/${channelId}?date=${encodeURIComponent(dateStr)}`);
+            if (!resp.ok) {
+                listEl.innerHTML = '<div class="py-6 text-center text-xs text-slate-500">Program se nepodařilo načíst.</div>';
+                return;
+            }
+            const data = await resp.json();
+            const progs = data.programmes || [];
+
+            if (progs.length === 0) {
+                listEl.innerHTML = '<div class="py-8 text-center text-xs text-slate-500"><i class="fa-solid fa-calendar-xmark text-xl text-slate-600 block mb-2"></i>Pro tento den není program v databázi k dispozici.</div>';
+                return;
+            }
+
+            let liveItemEl = null;
+
+            progs.forEach(p => {
+                const item = document.createElement('div');
+                let borderClass = 'border-slate-800 hover:border-slate-700 bg-slate-950/40';
+                if (p.is_live) {
+                    borderClass = 'border-red-600/80 bg-red-950/20 shadow-md ring-1 ring-red-500/30';
+                }
+
+                item.className = `p-3 rounded-xl border ${borderClass} transition flex flex-col sm:flex-row sm:items-center justify-between gap-3`;
+
+                let actionHtml = '';
+                if (p.is_live) {
+                    actionHtml = `
+                        <div class="flex items-center space-x-2 shrink-0">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white animate-pulse">
+                                <i class="fa-solid fa-circle text-[5px] mr-1"></i> PRÁVĚ BĚŽÍ
+                            </span>
+                            <button onclick="backToLive()" class="px-2.5 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white rounded-lg font-medium transition shadow">
+                                Sledovat živě
+                            </button>
+                        </div>
+                    `;
+                } else if (p.can_catchup) {
+                    actionHtml = `
+                        <div class="shrink-0">
+                            <button onclick="playCatchup('${p.idec || ''}', '${(p.title || '').replace(/'/g, "\\'")}', ${p.start_ts}, ${p.end_ts})" class="px-3 py-1.5 text-xs bg-blue-600/90 hover:bg-blue-500 text-white rounded-lg font-medium transition shadow flex items-center space-x-1.5">
+                                <i class="fa-solid fa-play text-[10px]"></i>
+                                <span>Přehrát záznam</span>
+                            </button>
+                        </div>
+                    `;
+                } else if (p.is_past) {
+                    actionHtml = `<span class="text-[11px] text-slate-500 italic">Vysíláno</span>`;
+                } else {
+                    actionHtml = `<span class="text-[11px] text-slate-500"><i class="fa-regular fa-clock text-[10px] mr-1"></i>Nadcházející</span>`;
+                }
+
+                const descHtml = p.description ? `<p class="text-xs text-slate-400 mt-1 line-clamp-2">${p.description}</p>` : '';
+
+                item.innerHTML = `
+                    <div class="min-w-0 flex items-start space-x-3">
+                        <div class="px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs font-mono font-bold shrink-0 text-center">
+                            ${p.start_time || '--:--'}
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="text-sm font-semibold text-white truncate ${p.is_live ? 'text-red-300' : ''}">
+                                ${p.title}
+                            </h4>
+                            ${descHtml}
+                        </div>
+                    </div>
+                    ${actionHtml}
+                `;
+
+                listEl.appendChild(item);
+                if (p.is_live) {
+                    liveItemEl = item;
+                }
+            });
+
+            if (liveItemEl && selectedDateOffset === 0) {
+                setTimeout(() => {
+                    liveItemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 150);
+            }
+        } catch (err) {
+            console.error('Chyba při načítání TV programu:', err);
+            listEl.innerHTML = '<div class="py-6 text-center text-xs text-red-400">Chyba při komunikaci se serverem.</div>';
+        } finally {
+            if (loadingEl) loadingEl.classList.add('hidden');
         }
     }
 

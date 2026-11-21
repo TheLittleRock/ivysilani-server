@@ -1,4 +1,5 @@
 import time
+import json
 import secrets
 from typing import List, Optional, Dict, Any
 from app.db.database import get_db
@@ -555,3 +556,44 @@ def clear_old_epg(cutoff_ts: int) -> int:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM epg_programmes WHERE end_ts < ?", (cutoff_ts,))
         return cursor.rowcount
+
+def fix_misclassified_shows() -> int:
+    """Opraví chybně zařazené seriály, cykly a denní pořady, které byly v databázi nesprávně označeny jako movie."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE shows SET show_type = 'series'
+        WHERE show_type = 'movie' AND (
+            genre LIKE '%seriál%' OR
+            genre LIKE '%cyklus%' OR
+            genre LIKE '%série%' OR
+            genre LIKE '%minisérie%' OR
+            genre LIKE '%pořad%' OR
+            total_episodes > 1 OR
+            id IN (SELECT show_id FROM episodes GROUP BY show_id HAVING COUNT(*) > 1) OR
+            title LIKE '%Události%' OR
+            title LIKE '%Počasí%' OR
+            title LIKE '%Zprávy%' OR
+            title LIKE '%Černé ovce%' OR
+            title LIKE '%Sama doma%' OR
+            title LIKE '%Studio 6%' OR
+            title LIKE '%Toulavá kamera%'
+        )
+        """)
+        updated_count = cursor.rowcount
+        conn.commit()
+        return updated_count
+
+def get_homepage_blocks() -> List[Dict[str, Any]]:
+    """Načte uložené doporučené bloky z hlavní stránky iVysílání."""
+    val = get_setting("homepage_blocks")
+    if val:
+        try:
+            return json.loads(val)
+        except Exception:
+            pass
+    return []
+
+def save_homepage_blocks(blocks: List[Dict[str, Any]]) -> bool:
+    """Uloží doporučené bloky z hlavní stránky iVysílání do nastavení."""
+    return set_setting("homepage_blocks", json.dumps(blocks, ensure_ascii=False))

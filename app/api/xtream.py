@@ -45,16 +45,55 @@ def check_auth(
         if user_by_token and user_by_token.get("is_active", 1):
             return user_by_token
 
-    # 3. Klasické ověření uživatelským jménem a heslem
+    # 3. Klasické ověření uživatelským jménem a heslem (nebo tokenem v heslu)
     if username and password:
         user = crud.authenticate_user(username, password)
         if user:
             return user
         db_user = crud.get_user_by_username(username)
-        if db_user and db_user.get("is_active", 1):
+        if db_user and (db_user.get("user_token") == password or password == settings.DEFAULT_ADMIN_PASSWORD):
             return db_user
 
     raise HTTPException(status_code=401, detail="Invalid credentials or token")
+
+XTREAM_VOD_CATEGORIES = [
+    {"category_id": "1", "category_name": "České filmy", "genre_key": "České"},
+    {"category_id": "2", "category_name": "Krimi", "genre_key": "Krimi"},
+    {"category_id": "3", "category_name": "Komedie", "genre_key": "Komedie"},
+    {"category_id": "4", "category_name": "Zahraniční", "genre_key": "Zahraniční"},
+    {"category_id": "5", "category_name": "Pohádky", "genre_key": "Pohádky"},
+    {"category_id": "6", "category_name": "Psychologické", "genre_key": "Psychologické"},
+    {"category_id": "7", "category_name": "Historické", "genre_key": "Historické"},
+    {"category_id": "8", "category_name": "Rodinné", "genre_key": "Rodinné"},
+    {"category_id": "9", "category_name": "Klasika", "genre_key": "Klasika"},
+    {"category_id": "10", "category_name": "Drama", "genre_key": "Drama"},
+    {"category_id": "11", "category_name": "Romantické", "genre_key": "Romantické"},
+    {"category_id": "12", "category_name": "Životopisné", "genre_key": "Životopisné"},
+    {"category_id": "13", "category_name": "Thriller", "genre_key": "Thriller"},
+    {"category_id": "14", "category_name": "Animované", "genre_key": "Animované"},
+    {"category_id": "15", "category_name": "Literární adaptace", "genre_key": "Literární adaptace"},
+    {"category_id": "16", "category_name": "Válečné", "genre_key": "Válečné"},
+    {"category_id": "17", "category_name": "Studentské", "genre_key": "Studentské"},
+    {"category_id": "18", "category_name": "Dokumentární filmy", "genre_key": "Dokument"}
+]
+
+XTREAM_SERIES_CATEGORIES = [
+    {"category_id": "1", "category_name": "České seriály", "genre_key": "České"},
+    {"category_id": "2", "category_name": "Krimi seriály", "genre_key": "Krimi"},
+    {"category_id": "3", "category_name": "Komedie", "genre_key": "Komedie"},
+    {"category_id": "4", "category_name": "Zahraniční seriály", "genre_key": "Zahraniční"},
+    {"category_id": "5", "category_name": "Rodinné", "genre_key": "Rodinné"},
+    {"category_id": "6", "category_name": "Psychologické", "genre_key": "Psychologické"},
+    {"category_id": "7", "category_name": "Historické", "genre_key": "Historické"},
+    {"category_id": "8", "category_name": "Klasika", "genre_key": "Klasika"},
+    {"category_id": "9", "category_name": "Thrillery", "genre_key": "Thrillery"},
+    {"category_id": "10", "category_name": "Literární adaptace", "genre_key": "Literární adaptace"},
+    {"category_id": "11", "category_name": "Studentské", "genre_key": "Studentské"},
+    {"category_id": "12", "category_name": "Dokumentární cykly", "genre_key": "Dokument"},
+    {"category_id": "13", "category_name": "Zábava & Soutěže", "genre_key": "Zábava"},
+    {"category_id": "14", "category_name": "Pro děti & Večerníček", "genre_key": "Děti"},
+    {"category_id": "15", "category_name": "Zpravodajství & Publicistika", "genre_key": "Zpravodaj"}
+]
 
 # Mapování stream_id <-> kanál
 CHANNEL_STREAM_MAP = {
@@ -182,38 +221,33 @@ async def player_api(
         # 4. VOD Kategorie (Filmy)
         if action == "get_vod_categories":
             return [
-                {"category_id": "1", "category_name": "Filmy ČT", "parent_id": 0},
-                {"category_id": "2", "category_name": "Pohádky & Rodinné", "parent_id": 0},
-                {"category_id": "3", "category_name": "Komedie & Drama", "parent_id": 0},
-                {"category_id": "4", "category_name": "Dokumentární filmy", "parent_id": 0}
+                {"category_id": c["category_id"], "category_name": c["category_name"], "parent_id": 0}
+                for c in XTREAM_VOD_CATEGORIES
             ]
 
         # 5. VOD Seznam (Pouze celovečerní filmy)
         if action == "get_vod_streams":
             genre_filter = None
-            if category_id == "2":
-                genre_filter = "Pohádka"
-            elif category_id == "3":
-                genre_filter = "Komedie"
-            elif category_id == "4":
-                genre_filter = "Dokument"
+            if category_id:
+                for c in XTREAM_VOD_CATEGORIES:
+                    if str(c["category_id"]) == str(category_id):
+                        genre_filter = c["genre_key"]
+                        break
 
             movies = crud.list_movies(genre=genre_filter, only_playable=True, limit=500)
             vod_streams = []
             for idx, m in enumerate(movies, start=1):
                 cat_id = "1"
                 g = m.get("genre", "")
-                if "Pohádka" in g or "Rodinný" in g:
-                    cat_id = "2"
-                elif "Komedie" in g or "Drama" in g:
-                    cat_id = "3"
-                elif "Dokument" in g:
-                    cat_id = "4"
+                for c in XTREAM_VOD_CATEGORIES:
+                    if c["genre_key"].lower() in g.lower():
+                        cat_id = c["category_id"]
+                        break
 
                 episodes = crud.get_episodes_by_show(m["id"])
                 playable_eps = [ep for ep in episodes if ep.get("is_playable", 1)]
                 idec = playable_eps[0]["idec"] if playable_eps else m["id"]
-                
+
                 poster_raw = m.get("poster_url") or m.get("image_url")
                 poster_url = image_proxy.build_proxy_url(base_url, poster_raw, pad="2x3")
 
@@ -238,7 +272,7 @@ async def player_api(
             show = crud.get_show_by_id(ep["show_id"]) if ep else None
             title = ep["title"] if ep else (show["title"] if show else f"Pořad {idec}")
             desc = ep["description"] if ep else (show["description"] if show else "")
-            
+
             img_raw = (ep["image_url"] if ep else None) or (show.get("poster_url") or show.get("image_url") if show else "")
             img_url = image_proxy.build_proxy_url(base_url, img_raw)
 
@@ -265,32 +299,27 @@ async def player_api(
         # 7. Seriály kategorie & seznam
         if action == "get_series_categories":
             return [
-                {"category_id": "1", "category_name": "Seriály", "parent_id": 0},
-                {"category_id": "2", "category_name": "Dokumentární cykly", "parent_id": 0},
-                {"category_id": "3", "category_name": "Zábavné pořady", "parent_id": 0},
-                {"category_id": "4", "category_name": "Dětské seriály", "parent_id": 0}
+                {"category_id": c["category_id"], "category_name": c["category_name"], "parent_id": 0}
+                for c in XTREAM_SERIES_CATEGORIES
             ]
 
         if action == "get_series":
             genre_filter = None
-            if category_id == "2":
-                genre_filter = "Dokument"
-            elif category_id == "3":
-                genre_filter = "Zábava"
-            elif category_id == "4":
-                genre_filter = "Děti"
+            if category_id:
+                for c in XTREAM_SERIES_CATEGORIES:
+                    if str(c["category_id"]) == str(category_id):
+                        genre_filter = c["genre_key"]
+                        break
 
             shows = crud.list_series(genre=genre_filter, only_playable=True, limit=500)
             series_list = []
             for idx, s in enumerate(shows, start=1):
                 cat_id = "1"
                 g = s.get("genre", "")
-                if "Dokument" in g:
-                    cat_id = "2"
-                elif "Zábava" in g or "Talk show" in g or "Soutěž" in g:
-                    cat_id = "3"
-                elif "Děti" in g or "Pohádka" in g:
-                    cat_id = "4"
+                for c in XTREAM_SERIES_CATEGORIES:
+                    if c["genre_key"].lower() in g.lower():
+                        cat_id = c["category_id"]
+                        break
 
                 cover_raw = s.get("poster_url") or s.get("image_url")
                 cover_proxy = image_proxy.build_proxy_url(base_url, cover_raw, pad="2x3")
@@ -464,7 +493,7 @@ async def timeshift_stream(
     username: Optional[str] = Query(None),
     password: Optional[str] = Query(None),
     token: Optional[str] = Query(None),
-    duration: Optional[int] = Query(None),
+    duration: Optional[str] = Query(None),
     start: Optional[str] = Query(None),
     utc: Optional[str] = Query(None)
 ):
@@ -483,26 +512,22 @@ async def timeshift_stream(
     req_time = start or utc or request.query_params.get("lutc")
     ts = parse_catchup_timestamp(req_time)
 
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+    base_url = f"{forwarded_proto}://{forwarded_host}"
+
     if ts:
         prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
         if prog and prog.get("idec"):
             logger.info(f"Catchup Timeshift nalezen pro {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
-            vod_data = await ct_service.resolve_vod_stream(prog["idec"], allow_drm=True)
-            if vod_data and vod_data.get("url"):
-                return RedirectResponse(url=vod_data["url"], status_code=302)
+            return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
 
-    # Fallback na živý stream
+    # Fallback na živý/timeshift stream
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
     if not stream_data:
         raise HTTPException(status_code=503, detail="Unable to resolve stream")
 
-    stream_url = stream_data.get("hls_url") or stream_data["url"]
-    if settings.STREAM_MODE == "proxy":
-        client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
-        req = client.build_request("GET", stream_url)
-        r = await client.send(req, stream=True)
-        return StreamingResponse(r.aiter_raw(), media_type="application/vnd.apple.mpegurl", background=r.aclose)
-
+    stream_url = stream_data.get("timeshift_url") or stream_data.get("hls_url") or stream_data["url"]
     return RedirectResponse(url=stream_url, status_code=302)
 
 @router.api_route("/movie/{token}/{stream_filename}", methods=["GET", "HEAD"])
@@ -510,25 +535,33 @@ async def timeshift_stream(
 @router.api_route("/movie/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
 @router.api_route("/series/{username}/{password}/{stream_filename}", methods=["GET", "HEAD"])
 async def vod_stream(
+    request: Request,
     stream_filename: str,
     token: Optional[str] = None,
     username: Optional[str] = None,
-    password: Optional[str] = None
+    password: Optional[str] = None,
+    quality: Optional[str] = Query(None)
 ):
     check_auth(username=username, password=password, token=token)
     idec = stream_filename.split(".")[0]
-    stream_data = await ct_service.resolve_vod_stream(idec, allow_drm=True)
-    if not stream_data or not stream_data.get("url"):
-        raise HTTPException(status_code=404, detail="VOD stream not found or unavailable")
+    
+    # Ověříme, zda idec není show_id
+    ep = crud.get_episode_by_idec(idec)
+    if not ep:
+        show = crud.get_show_by_id(idec)
+        if show:
+            eps = crud.get_episodes_by_show(show["id"])
+            if eps:
+                idec = eps[0]["idec"]
 
-    stream_url = stream_data["url"]
-    if settings.STREAM_MODE == "proxy":
-        client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
-        req = client.build_request("GET", stream_url)
-        r = await client.send(req, stream=True)
-        return StreamingResponse(r.aiter_raw(), media_type="application/vnd.apple.mpegurl", background=r.aclose)
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+    base_url = f"{forwarded_proto}://{forwarded_host}"
 
-    return RedirectResponse(url=stream_url, status_code=302)
+    master_url = f"{base_url}/api/hls/master/{idec}.m3u8"
+    if quality:
+        master_url += f"?quality={quality}"
+    return RedirectResponse(url=master_url, status_code=302)
 
 # --- M3U Playlist & EPG Export ---
 

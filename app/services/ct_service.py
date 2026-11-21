@@ -208,13 +208,59 @@ def parse_episode_number(title: str, default: int = 1) -> int:
         return int(m_num.group(1))
     return default
 
+CZECH_MONTHS = {
+    'ledna': 1, 'leden': 1, 'února': 2, 'únor': 2, 'března': 3, 'březen': 3,
+    'dubna': 4, 'duben': 4, 'května': 5, 'květen': 5, 'června': 6, 'červen': 6,
+    'července': 7, 'červenec': 7, 'srpna': 8, 'srpen': 8, 'září': 9,
+    'října': 10, 'říjen': 10, 'listopadu': 11, 'listopad': 11, 'prosince': 12, 'prosinec': 12
+}
+
+def parse_periodical_date(title: str, idec: str = "", dt_str: str = "") -> Tuple[int, int, str]:
+    """Extrahuje rok (jako sérii), pořadí/den v roce (jako díl) a formátované datum pro denní a periodické pořady."""
+    year = datetime.now().year
+    month = 1
+    day = 1
+    clean = (title or "").replace("\xa0", " ").strip()
+
+    if dt_str:
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            return dt.year, dt.timetuple().tm_yday, f"{dt.day}. {dt.month}. {dt.year}"
+        except Exception:
+            pass
+
+    m = re.search(r"(\d{1,2})\.\s*([a-záčďéěíňóřšťúůýž]+)(?:\s+(\d{4}))?", clean, re.IGNORECASE)
+    if m:
+        day = int(m.group(1))
+        m_str = m.group(2).lower()
+        month = CZECH_MONTHS.get(m_str, 1)
+        if m.group(3):
+            year = int(m.group(3))
+        elif idec and len(idec) >= 3 and idec[:3].isdigit():
+            y2 = int(idec[1:3])
+            year = 2000 + y2 if y2 < 70 else 1900 + y2
+        else:
+            year = datetime.now().year
+    elif idec and len(idec) >= 3 and idec[:3].isdigit():
+        y2 = int(idec[1:3])
+        year = 2000 + y2 if y2 < 70 else 1900 + y2
+
+    try:
+        dt = datetime(year, month, day)
+        yday = dt.timetuple().tm_yday
+    except Exception:
+        yday = 1
+
+    return year, yday, f"{day}. {month}. {year}"
+
 class CTService:
     def __init__(self):
         self._headers = {
             "User-Agent": settings.USER_AGENT,
             "Origin": "https://www.ceskatelevize.cz",
             "Referer": "https://www.ceskatelevize.cz/",
-            "Accept": "application/json, text/plain, */*"
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "cs,en;q=0.9"
         }
         self._cache = {}
 
@@ -264,7 +310,7 @@ class CTService:
                     return None
 
                 is_drm = False
-                if dash_main and ("drmOnly=true" in dash_main or dash_data.get("streamUrls", {}).get("encryption") == "wv"):
+                if not hls_main and dash_main and ("drmOnly=true" in dash_main or dash_data.get("streamUrls", {}).get("encryption") == "wv"):
                     is_drm = True
 
                 result = {
@@ -453,7 +499,8 @@ class CTService:
         season_id: Optional[str] = None,
         only_playable: bool = False,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        order_by: str = "oldest"
     ) -> List[Dict[str, Any]]:
         """Získá reálné epizody pro daný pořad z ČT GraphQL query GetEpisodes."""
         url = "https://api.ceskatelevize.cz/graphql/"
@@ -483,7 +530,7 @@ class CTService:
             "seasonId": season_id,
             "limit": limit,
             "offset": offset,
-            "orderBy": "oldest",
+            "orderBy": order_by,
             "onlyPlayable": only_playable
         }
         try:
@@ -515,6 +562,11 @@ class CTService:
               description
               genres { id title }
               imageUrl(width: 480, height: 270)
+              images {
+                card
+                cardPortrait
+                poster
+              }
               sidp
               title
               playable
@@ -540,6 +592,77 @@ class CTService:
             logger.warning(f"GraphQL SearchShows failed: {e}")
         return []
 
+    async def get_homepage_blocks(self) -> List[Dict[str, Any]]:
+        """Získá aktuální doporučené sekce a pořady z hlavní stránky iVysílání přes GraphQL."""
+        url = "https://api.ceskatelevize.cz/graphql/"
+        params = {"client": "iVysilaniWeb", "version": "1.131.1"}
+        query = """
+        query {
+          homepage(deviceType: \"website\") {
+            rows {
+              title
+              slug
+              disabled
+              assets {
+                totalCount
+                items {
+                  __typename
+                  ... on ShowCard {
+                    id
+                    code
+                    title
+                    description
+                    images {
+                      card
+                      cardPortrait
+                    }
+                    programme {
+                      id
+                      showType
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        try:
+            async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
+                r = await client.post(url, params=params, json={"query": query})
+                if r.status_code == 200:
+                    data = r.json()
+                    rows = data.get("data", {}).get("homepage", {}).get("rows", [])
+                    result_rows = []
+                    for row in rows:
+                        title = (row.get("title") or "").replace("\xa0", " ").strip()
+                        slug = row.get("slug") or ""
+                        items = row.get("assets", {}).get("items", [])
+                        valid_items = []
+                        for it in items:
+                            if it.get("title") and it.get("id"):
+                                raw_p = (it.get("images") or {}).get("cardPortrait")
+                                portrait = raw_p if raw_p and "fallbackImages" not in raw_p else None
+                                valid_items.append({
+                                    "id": str(it.get("id")),
+                                    "code": it.get("code") or "",
+                                    "title": it.get("title").replace("\xa0", " ").strip(),
+                                    "description": it.get("description") or "",
+                                    "card_url": (it.get("images") or {}).get("card") or "",
+                                    "poster_url": portrait or (it.get("images") or {}).get("card") or "",
+                                    "show_type": (it.get("programme") or {}).get("showType") or "series"
+                                })
+                        if valid_items:
+                            result_rows.append({
+                                "title": title,
+                                "slug": slug,
+                                "items": valid_items
+                            })
+                    return result_rows
+        except Exception as e:
+            logger.warning(f"Error fetching homepage blocks: {e}")
+        return []
+
     async def scrape_show_metadata(self, slug_or_id_or_url: str) -> Optional[Dict[str, Any]]:
         """Stáhne a zparsuje kompletní informace o pořadu, všech sériích a všech dílech z webu ČT."""
         clean_input = slug_or_id_or_url.strip()
@@ -548,7 +671,13 @@ class CTService:
 
         url = f"https://www.ceskatelevize.cz/porady/{slug}/"
         try:
-            async with httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT}, follow_redirects=True, timeout=12.0) as client:
+            req_headers = {
+                "User-Agent": settings.USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "cs,en;q=0.9",
+                "Referer": "https://www.ceskatelevize.cz/"
+            }
+            async with httpx.AsyncClient(headers=req_headers, follow_redirects=True, timeout=12.0) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     # Zkusíme vyhledat přes GraphQL, pokud slug nefungoval přímo
@@ -625,7 +754,36 @@ class CTService:
                 raw_type = (prog.get("showType") or "").lower()
                 seasons_from_apollo = [v for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") == "Season"]
                 seasons_list = prog.get("seasons", []) or seasons_from_apollo
-                show_type = "movie" if raw_type == "movie" or ("film" in raw_type) or (not seasons_list and prog.get("idec")) else "series"
+                ep_previews = [v for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") == "EpisodePreview"]
+                has_datetime_previews = any(p.get("date", {}).get("datetime") for p in ep_previews)
+                has_season_series = any('řada' in (s.get('title') or '').lower() or 'stardance' in (s.get('title') or '').lower() for s in seasons_list)
+
+                # Žánry
+                genres = [g["title"] for g in prog.get("flatGenres", []) if isinstance(g, dict) and "title" in g]
+                if not genres:
+                    genres = [v.get("title") for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") in ["FlatGenre", "CardGenre"] and v.get("title")]
+                genre = ", ".join(list(dict.fromkeys(genres))[:3]) if genres else "Archiv"
+
+                # Detekce periodických / denních pořadů bez klasických řad
+                is_periodical_or_daily = (
+                    any(slug.startswith(x) for x in ['1097181328-udalosti', '10393496397-udalosti-za-okamzik-a-pocasi', '1097181328', '10393496397'])
+                    or (has_datetime_previews and not has_season_series and any(k in genre.lower() for k in ['zpravodaj', 'publicist', 'počasí', 'magazín', 'zábav']))
+                    or any(k in title.lower() for k in ['události', 'počasí', 'zprávy', 'černé ovce', 'sama doma', 'studio 6', 'toulavá kamera', 'hyde park'])
+                )
+
+                # Přesná detekce typu (seriál vs. film)
+                is_series_by_genre = any(k in genre.lower() for k in ['seriál', 'cyklus', 'série', 'minisérie', 'pořad'])
+                has_multiple_episodes = len(ep_previews) > 1 or len(seasons_list) > 1
+
+                if is_periodical_or_daily or is_series_by_genre or has_multiple_episodes or len(seasons_list) > 0:
+                    show_type = "series"
+                elif raw_type == "movie" or ("film" in raw_type and not has_multiple_episodes):
+                    show_type = "movie"
+                elif len(ep_previews) <= 1 and prog.get("idec") and not is_series_by_genre:
+                    show_type = "movie"
+                else:
+                    show_type = "series" if has_multiple_episodes else "movie"
+
                 is_playable = bool(prog.get("isPlayable", True))
 
                 # Extrakce obrázků různých typů
@@ -638,9 +796,36 @@ class CTService:
                     or images.get("card2x")
                     or ""
                 )
+
+                # Nativní vertikální plakát cardPortrait (2:3) z ČT
+                raw_portrait = (
+                    images.get("cardPortrait")
+                    or images.get("cardPortrait({\"width\":440})")
+                    or images.get("cardPortrait({\"height\":660,\"width\":440})")
+                )
+                if not raw_portrait or "fallbackImages" in str(raw_portrait):
+                    for k, v in apollo_state.items():
+                        if isinstance(v, dict) and "cardPortrait" in v:
+                            cand = v.get("cardPortrait")
+                            if cand and isinstance(cand, str) and "fallbackImages" not in cand:
+                                raw_portrait = cand
+                                break
+
+                # Zkusíme dohledat nativní vertikální plakát (cardPortrait) z GraphQL SearchShows
+                if not raw_portrait or "fallbackImages" in str(raw_portrait):
+                    try:
+                        gql_search = await self.search_shows_graphql(title, limit=1)
+                        if gql_search:
+                            cand_port = (gql_search[0].get("images") or {}).get("cardPortrait")
+                            if cand_port and "fallbackImages" not in cand_port:
+                                raw_portrait = cand_port
+                    except Exception:
+                        pass
+
                 placeholder_imgs = images.get("placeholderWithFallback", {}) or {}
                 poster_url = (
-                    images.get("poster")
+                    (raw_portrait if raw_portrait and "fallbackImages" not in raw_portrait else None)
+                    or images.get("poster")
                     or images.get("poster2x")
                     or placeholder_imgs.get("placeholderMobile")
                     or images.get("card")
@@ -654,62 +839,68 @@ class CTService:
                 )
                 image_url = images.get("card") or backdrop_url or poster_url
 
-                # Žánry
-                genres = [g["title"] for g in prog.get("flatGenres", []) if isinstance(g, dict) and "title" in g]
-                if not genres:
-                    genres = [v.get("title") for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") in ["FlatGenre", "CardGenre"] and v.get("title")]
-                genre = ", ".join(list(dict.fromkeys(genres))[:3]) if genres else "Archiv"
-
                 episodes = []
+                seen_idecs = set()
 
-                # Kontrola denních zpravodajských pořadů (např. Události, Události za okamžik a počasí)
-                ep_previews = [v for k, v in apollo_state.items() if isinstance(v, dict) and v.get("__typename") == "EpisodePreview"]
-                has_datetime_previews = any(p.get("date", {}).get("datetime") for p in ep_previews)
-                has_season_series = any('řada' in (s.get('title') or '').lower() or 'stardance' in (s.get('title') or '').lower() for s in seasons_list)
+                if show_type == "series" and is_periodical_or_daily:
+                    # Periodický nebo denní pořad (Události, Počasí, Zprávy, Toulavá kamera, Sama doma...)
+                    # 1. Zkusíme načíst nejnovější epizody z GraphQL
+                    gql_items = []
+                    if programme_id:
+                        gql_items = await self.get_episodes_for_programme(programme_id, limit=50, order_by="lastTvBroadcast")
+                        if not gql_items:
+                            gql_items = await self.get_episodes_for_programme(programme_id, limit=50, order_by="newest")
 
-                is_daily_news = (
-                    any(slug.startswith(x) for x in ['1097181328-udalosti', '10393496397-udalosti-za-okamzik-a-pocasi', '1097181328', '10393496397'])
-                    or (has_datetime_previews and not has_season_series and any(k in genre.lower() for k in ['zpravodaj', 'publicist']))
-                )
-
-                if show_type == "series" and is_daily_news and len(ep_previews) >= 1:
-                    # Denní pořad jako Události, Události za okamžik apod.
-                    # Řadíme od nejnovějšího k nejstaršímu
-                    sorted_previews = sorted(
-                        ep_previews,
-                        key=lambda p: p.get("date", {}).get("datetime") or "",
-                        reverse=True
-                    )
-                    seen_idecs = set()
-                    for idx, p in enumerate(sorted_previews, start=1):
-                        p_idec = str(p.get("id") or "")
+                    # 2. Zpracujeme epizody z GraphQL
+                    day_counts = {}
+                    for item in gql_items:
+                        p_idec = str(item.get("id") or "")
                         if not p_idec or p_idec in seen_idecs:
                             continue
                         seen_idecs.add(p_idec)
-
-                        dt_str = p.get("date", {}).get("datetime") or ""
-                        season_val = 1
-                        ep_clean_title = p.get("title") or title
-                        if dt_str:
-                            try:
-                                dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-                                season_val = dt.year
-                                ep_clean_title = f"{dt.day}. {dt.month}. {dt.year}: {title}"
-                            except Exception:
-                                pass
-
-                        p_imgs = p.get("images") or {}
-                        p_img = p_imgs.get("card({\"height\":270,\"width\":480})") or image_url
+                        raw_ep_title = item.get("title") or title
+                        season_val, yday, formatted_date = parse_periodical_date(raw_ep_title, p_idec)
+                        day_counts[yday] = day_counts.get(yday, 0) + 1
+                        ep_num = yday if day_counts[yday] == 1 else yday * 10 + (day_counts[yday] - 1)
+                        ep_imgs = item.get("images") or {}
+                        ep_img = ep_imgs.get("card") or image_url
 
                         episodes.append({
                             "id": f"{show_id}_{p_idec}",
                             "idec": p_idec,
-                            "title": ep_clean_title,
+                            "title": f"{formatted_date}: {raw_ep_title}",
+                            "description": item.get("description") or description,
+                            "image_url": ep_img,
+                            "duration": item.get("duration", 0),
+                            "season": season_val,
+                            "episode_num": ep_num,
+                            "is_playable": bool(item.get("playable", True)),
+                            "is_drm": False
+                        })
+
+                    # 3. Zpracujeme také ep_previews (z apolloState), pokud ještě chybí
+                    for p in ep_previews:
+                        p_idec = str(p.get("id") or "")
+                        if not p_idec or p_idec in seen_idecs:
+                            continue
+                        seen_idecs.add(p_idec)
+                        dt_str = p.get("date", {}).get("datetime") or ""
+                        raw_ep_title = p.get("title") or title
+                        season_val, yday, formatted_date = parse_periodical_date(raw_ep_title, p_idec, dt_str=dt_str)
+                        day_counts[yday] = day_counts.get(yday, 0) + 1
+                        ep_num = yday if day_counts[yday] == 1 else yday * 10 + (day_counts[yday] - 1)
+                        p_imgs = p.get("images") or {}
+                        p_img = p_imgs.get("card({\"height\":270,\"width\":480})") or p_imgs.get("card") or image_url
+
+                        episodes.append({
+                            "id": f"{show_id}_{p_idec}",
+                            "idec": p_idec,
+                            "title": f"{formatted_date}: {raw_ep_title}",
                             "description": p.get("description") or description,
                             "image_url": p_img,
                             "duration": p.get("duration", 0),
                             "season": season_val,
-                            "episode_num": idx,
+                            "episode_num": ep_num,
                             "is_playable": bool(p.get("playable", True)),
                             "is_drm": False
                         })
@@ -723,7 +914,7 @@ class CTService:
                             s_id = s_item.get("id")
                             s_title = s_item.get("title") or ""
                             if s_id:
-                                s_eps = await self.get_episodes_for_programme(programme_id, season_id=s_id, limit=50)
+                                s_eps = await self.get_episodes_for_programme(programme_id, season_id=s_id, limit=50, order_by="oldest")
                                 s_num = parse_season_number(s_title, default=1)
                                 for ep_item in s_eps:
                                     ep_item["_resolved_season"] = s_num
@@ -731,21 +922,20 @@ class CTService:
 
                     # Pokud nic nepřišlo po řadách nebo řady nebyly definovány, zkusíme bez filtru
                     if not gql_episodes and programme_id:
-                        page1 = await self.get_episodes_for_programme(programme_id, limit=50, offset=0)
+                        page1 = await self.get_episodes_for_programme(programme_id, limit=50, offset=0, order_by="oldest")
                         gql_episodes.extend(page1)
                         if len(page1) == 50:
-                            page2 = await self.get_episodes_for_programme(programme_id, limit=50, offset=50)
+                            page2 = await self.get_episodes_for_programme(programme_id, limit=50, offset=50, order_by="oldest")
                             gql_episodes.extend(page2)
                             if len(page2) == 50:
-                                page3 = await self.get_episodes_for_programme(programme_id, limit=50, offset=100)
+                                page3 = await self.get_episodes_for_programme(programme_id, limit=50, offset=100, order_by="oldest")
                                 gql_episodes.extend(page3)
 
-                    seen_ep_ids = set()
                     for idx, ep_item in enumerate(gql_episodes, start=1):
                         ep_idec = str(ep_item.get("id") or "")
-                        if not ep_idec or ep_idec in seen_ep_ids:
+                        if not ep_idec or ep_idec in seen_idecs:
                             continue
-                        seen_ep_ids.add(ep_idec)
+                        seen_idecs.add(ep_idec)
 
                         raw_ep_title = ep_item.get("title") or f"Epizoda {idx}"
                         clean_num, clean_name = clean_episode_title(raw_ep_title)
@@ -779,7 +969,36 @@ class CTService:
                             "is_drm": False
                         })
 
-                # Fallback pro film nebo pokud seriál neměl dostupné epizody přes GraphQL
+                    # Pokud GraphQL nevrátil epizody, zkusíme ep_previews z Apollo state
+                    if not episodes and ep_previews:
+                        for idx, p in enumerate(ep_previews, start=1):
+                            p_idec = str(p.get("id") or "")
+                            if not p_idec or p_idec in seen_idecs:
+                                continue
+                            seen_idecs.add(p_idec)
+                            raw_ep_title = p.get("title") or f"Epizoda {idx}"
+                            clean_num, clean_name = clean_episode_title(raw_ep_title)
+                            ep_title = clean_name
+                            ep_season_title = (p.get("season") or {}).get("title", "")
+                            season_num = parse_season_number(ep_season_title, ep_title=raw_ep_title, default=1)
+                            ep_num = clean_num if clean_num is not None else parse_episode_number(raw_ep_title, default=idx)
+                            p_imgs = p.get("images") or {}
+                            p_img = p_imgs.get("card({\"height\":270,\"width\":480})") or p_imgs.get("card") or image_url
+
+                            episodes.append({
+                                "id": f"{show_id}_{p_idec}",
+                                "idec": p_idec,
+                                "title": ep_title,
+                                "description": p.get("description") or description,
+                                "image_url": p_img,
+                                "duration": p.get("duration", 0),
+                                "season": season_num,
+                                "episode_num": ep_num,
+                                "is_playable": bool(p.get("playable", True)),
+                                "is_drm": False
+                            })
+
+                # Fallback pro film nebo pokud seriál neměl dostupné epizody přes GraphQL ani previews
                 if not episodes:
                     idec = str(prog.get("idec") or (prog.get("actionButton") or {}).get("idec") or "")
                     if idec:

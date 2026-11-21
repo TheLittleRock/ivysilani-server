@@ -1,4 +1,5 @@
 import time
+import datetime
 import json
 from typing import Optional
 from fastapi import APIRouter, Request, Response, Form, Depends, HTTPException, Query
@@ -61,6 +62,72 @@ async def index_page(request: Request):
         "live_epg": live_epg,
         "active_tab": "live"
     })
+
+@router.get("/api/epg/schedule/{channel_id}")
+async def get_channel_schedule(channel_id: str, date: Optional[str] = Query(None)):
+    """Vrátí TV program pro daný kanál a datum s podporou catch-upu."""
+    epg_id = channel_id
+    ch_info = LIVE_CHANNELS.get(channel_id)
+    if ch_info:
+        epg_id = ch_info.get("epg_id", channel_id)
+    elif not epg_id.endswith(".cz"):
+        for ch in LIVE_CHANNELS.values():
+            if ch.get("channel_code") == channel_id or str(ch.get("num")) == channel_id or ch.get("id") == channel_id:
+                epg_id = ch.get("epg_id", channel_id)
+                break
+
+    now = datetime.datetime.now()
+    if not date:
+        date_str = now.strftime("%d.%m.%Y")
+    else:
+        date = date.strip()
+        if "-" in date:
+            try:
+                parts = date.split("-")
+                date_str = f"{int(parts[2]):02d}.{int(parts[1]):02d}.{parts[0]}"
+            except Exception:
+                date_str = now.strftime("%d.%m.%Y")
+        else:
+            date_str = date
+
+    programmes = crud.list_epg_programmes_for_channel(epg_id, date_str)
+    current_ts = int(time.time())
+
+    items = []
+    for p in programmes:
+        start_ts = p.get("start_ts", 0)
+        end_ts = p.get("end_ts", 0)
+        is_live = start_ts <= current_ts < end_ts
+        is_past = end_ts <= current_ts
+        idec = p.get("idec", "")
+        # Catch-up je možný, pokud pořad již začal a má IDEC nebo je v timeshift okně (7 dní)
+        can_catchup = (start_ts <= current_ts) and (bool(idec) or (current_ts - start_ts < 7 * 86400))
+
+        items.append({
+            "id": p.get("id"),
+            "channel_id": channel_id,
+            "epg_id": epg_id,
+            "title": p.get("title", ""),
+            "description": p.get("description", ""),
+            "start_time": p.get("start_time", ""),
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "date_str": date_str,
+            "idec": idec,
+            "has_video": p.get("has_video", 0),
+            "is_live": is_live,
+            "is_past": is_past,
+            "can_catchup": can_catchup,
+            "vod_url": f"/api/hls/master/{idec}.m3u8" if idec else None
+        })
+
+    return {
+        "channel_id": channel_id,
+        "epg_id": epg_id,
+        "date_str": date_str,
+        "total": len(items),
+        "programmes": items
+    }
 
 @router.get("/archive", response_class=HTMLResponse)
 async def archive_page(

@@ -278,14 +278,14 @@ class ArchiveCrawler:
 
         # Asynchronně doindexujeme seriály přes GraphQL s omezovačem souběžnosti
         if series_to_index:
-            sem = asyncio.Semaphore(4)
+            sem = asyncio.Semaphore(2)
             async def index_worker(s_slug):
                 async with sem:
                     try:
                         await self.index_show(s_slug)
                     except Exception as err:
                         logger.warning(f"Chyba při hloubkové indexaci seriálu {s_slug}: {err}")
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.3)
 
             await asyncio.gather(*(index_worker(s) for s in series_to_index))
 
@@ -302,6 +302,49 @@ class ArchiveCrawler:
         self.stats["start_time"] = int(time.time())
         total_indexed = 0
         seen_shows = set()
+
+        # 0. Nejprve opravíme existující chybně klasifikované pořady v DB
+        try:
+            fixed_count = crud.fix_misclassified_shows()
+            if fixed_count > 0:
+                logger.info(f"Opraveno {fixed_count} chybně klasifikovaných seriálů v DB.")
+        except Exception as e:
+            logger.warning(f"Chyba při opravě klasifikace: {e}")
+
+        # 0.1 Načteme a zaindexujeme doporučené bloky z hlavní stránky iVysílání
+        try:
+            self.stats["current_category"] = "Hlavní stránka: Tipy a doporučení"
+            logger.info("Stahuji a indexuji doporučené pořady z hlavní stránky iVysílání...")
+            hp_blocks = await ct_service.get_homepage_blocks()
+            if hp_blocks:
+                crud.save_homepage_blocks(hp_blocks)
+                for blk in hp_blocks:
+                    for it in blk.get("items", []):
+                        it_id = it.get("id")
+                        it_code = it.get("code")
+                        if it_id and it_id not in seen_shows:
+                            seen_shows.add(it_id)
+                            existing = crud.get_show_by_id(it_id)
+                            show_t = it.get("show_type") or "series"
+                            if not existing:
+                                crud.upsert_show(
+                                    show_id=it_id,
+                                    title=it["title"],
+                                    slug=it_code or it_id,
+                                    description=it.get("description", ""),
+                                    image_url=it.get("card_url", ""),
+                                    poster_url=it.get("poster_url", ""),
+                                    backdrop_url=it.get("card_url", ""),
+                                    logo_url="",
+                                    genre=blk.get("title", "Doporučujeme"),
+                                    year="",
+                                    show_type=show_t,
+                                    is_playable=True,
+                                    total_episodes=1
+                                )
+                                total_indexed += 1
+        except Exception as e:
+            logger.warning(f"Chyba při stahování homepage bloků: {e}")
 
         logger.info("Zahajuji hloubkovou indexaci celého katalogu iVysílání (všechny kategorie i podkategorie)...")
         try:

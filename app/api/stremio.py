@@ -66,7 +66,7 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
     token_suffix = f"/{token}" if token else ""
     return {
         "id": "cz.thelittlerock.ivysilani",
-        "version": "1.3.0",
+        "version": "1.3.1",
         "name": "Česká televize (iVysílání)",
         "description": "Kompletní filmový a seriálový archiv České televize (iVysílání) s českým dabingem a titulky.",
         "logo": f"{base_url}/static/logos/ct1.png",
@@ -77,13 +77,39 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
         "catalogs": [
             {
                 "type": "series",
-                "id": "ct_series",
-                "name": "iVysílání: Seriály",
+                "id": "ct_featured",
+                "name": "iVysílání: Doporučujeme",
+                "genres": [
+                    "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
+                    "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
+                    "Napínavé kriminální případy", "Vyrobila Česká televize"
+                ],
                 "extra": [
                     {
                         "name": "genre",
                         "options": [
-                            "Přehled", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
+                            "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
+                            "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
+                            "Napínavé kriminální případy", "Vyrobila Česká televize"
+                        ]
+                    },
+                    {"name": "search"},
+                    {"name": "skip"}
+                ]
+            },
+            {
+                "type": "series",
+                "id": "ct_series",
+                "name": "iVysílání: Seriály",
+                "genres": [
+                    "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
+                    "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
+                ],
+                "extra": [
+                    {
+                        "name": "genre",
+                        "options": [
+                            "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
                             "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
                         ]
                     },
@@ -95,11 +121,17 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                 "type": "movie",
                 "id": "ct_movies",
                 "name": "iVysílání: Filmy",
+                "genres": [
+                    "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
+                    "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
+                    "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
+                    "Válečné", "Studentské"
+                ],
                 "extra": [
                     {
                         "name": "genre",
                         "options": [
-                            "Přehled", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
+                            "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
                             "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
                             "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
                             "Válečné", "Studentské"
@@ -113,7 +145,9 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                 "type": "series",
                 "id": "ct_documentaries",
                 "name": "iVysílání: Dokumenty",
+                "genres": ["Vše", "Příroda", "Historie", "Věda", "Lidé a společnost"],
                 "extra": [
+                    {"name": "genre", "options": ["Vše", "Příroda", "Historie", "Věda", "Lidé a společnost"]},
                     {"name": "search"},
                     {"name": "skip"}
                 ]
@@ -122,12 +156,11 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                 "type": "series",
                 "id": "ct_entertainment",
                 "name": "iVysílání: Zábava",
+                "genres": ["Vše", "Talk show", "Soutěže", "Komedie", "Hudební"],
                 "extra": [
                     {
                         "name": "genre",
-                        "options": [
-                            "Přehled", "Talk show", "Soutěže", "Hudební", "Reality show", "Klasika"
-                        ]
+                        "options": ["Vše", "Talk show", "Soutěže", "Komedie", "Hudební"]
                     },
                     {"name": "search"},
                     {"name": "skip"}
@@ -137,7 +170,9 @@ def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
                 "type": "series",
                 "id": "ct_kids",
                 "name": "iVysílání: Pro děti",
+                "genres": ["Vše", "Večerníček", "Pohádky", "Animované", "Pro nejmenší"],
                 "extra": [
+                    {"name": "genre", "options": ["Vše", "Večerníček", "Pohádky", "Animované", "Pro nejmenší"]},
                     {"name": "search"},
                     {"name": "skip"}
                 ]
@@ -194,46 +229,86 @@ async def handle_catalog(request: Request, type: str, id: str, token: Optional[s
         return cors_response({"metas": metas})
 
     # 2. VOD Katalogy
-    genre_filter = genre if (genre and genre != "Přehled") else None
+    genre_filter = genre if (genre and genre not in ["Přehled", "Vše", "vse", "all"]) else None
     show_type = None
 
-    if id == "ct_series":
+    if id == "ct_featured":
+        # Doporučené bloky z hlavní stránky iVysílání
+        hp_blocks = crud.get_homepage_blocks()
+        matching_items = []
+        for blk in hp_blocks:
+            b_title = blk.get("title", "")
+            if not genre_filter or genre_filter.lower() in b_title.lower():
+                matching_items.extend(blk.get("items", []))
+
+        shows = []
+        seen_show_ids = set()
+        for it in matching_items:
+            it_id = it.get("id")
+            if it_id and it_id not in seen_show_ids:
+                seen_show_ids.add(it_id)
+                db_s = crud.get_show_by_id(it_id)
+                if db_s:
+                    shows.append(db_s)
+                else:
+                    shows.append({
+                        "id": it_id,
+                        "title": it.get("title", ""),
+                        "description": it.get("description", ""),
+                        "image_url": it.get("card_url", ""),
+                        "poster_url": it.get("poster_url", ""),
+                        "backdrop_url": it.get("card_url", ""),
+                        "genre": genre_filter or "Doporučujeme",
+                        "show_type": it.get("show_type", "series"),
+                        "year": ""
+                    })
+    elif id == "ct_series":
         show_type = "series"
+        shows = crud.list_shows(genre=genre_filter, show_type=show_type, only_playable=True, search=search, limit=60, offset=skip)
     elif id == "ct_movies":
         show_type = "movie"
+        shows = crud.list_shows(genre=genre_filter, show_type=show_type, only_playable=True, search=search, limit=60, offset=skip)
     elif id == "ct_documentaries":
         if not genre_filter:
             genre_filter = "Dokument"
+        shows = crud.list_shows(genre=genre_filter, only_playable=True, search=search, limit=60, offset=skip)
     elif id == "ct_entertainment":
         if not genre_filter:
             genre_filter = "Zábava"
+        shows = crud.list_shows(genre=genre_filter, only_playable=True, search=search, limit=60, offset=skip)
     elif id == "ct_kids":
         if not genre_filter:
             genre_filter = "Děti"
+        shows = crud.list_shows(genre=genre_filter, only_playable=True, search=search, limit=60, offset=skip)
+    else:
+        shows = crud.list_shows(genre=genre_filter, only_playable=True, search=search, limit=60, offset=skip)
 
-    # Hledání v lokální DB (pouze hratelné položky)
-    shows = crud.list_shows(
-        genre=genre_filter,
-        show_type=show_type,
-        only_playable=True,
-        search=search,
-        limit=60,
-        offset=skip
-    )
-
-    # Pokud uživatel vyhledává a v lokální DB není dostatek výsledků, prohledáme přímo GraphQL ČT
+    # Rychlé vyhledávání přes GraphQL bez blokování HTTP dotazy
     if search and len(shows) < 5:
         try:
             external_results = await ct_service.search_shows_graphql(search, limit=20)
-            seen_ids = {s["id"] for s in shows}
+            seen_ids = {str(s["id"]) for s in shows}
             for res in external_results:
-                sidp = res.get("sidp")
+                sidp = str(res.get("id") or res.get("sidp") or "")
                 if sidp and sidp not in seen_ids:
-                    # Rychle zinicializujeme metadata pořadu na pozadí
-                    show_meta = await ct_service.scrape_show_metadata(sidp)
-                    if show_meta and show_meta.get("is_playable", True):
-                        shows.append(show_meta)
-                        seen_ids.add(sidp)
+                    seen_ids.add(sidp)
+                    imgs = res.get("images") or {}
+                    raw_port = imgs.get("cardPortrait")
+                    port_url = raw_port if raw_port and "fallbackImages" not in raw_port else imgs.get("card")
+                    shows.append({
+                        "id": sidp,
+                        "title": res.get("title") or "",
+                        "description": res.get("description") or "",
+                        "image_url": imgs.get("card") or "",
+                        "poster_url": port_url or "",
+                        "backdrop_url": imgs.get("card") or "",
+                        "genre": ", ".join([g.get("title") for g in res.get("genres", []) if g.get("title")]),
+                        "show_type": "series" if any("seriál" in (g.get("title") or "").lower() for g in res.get("genres", [])) else "movie",
+                        "year": ""
+                    })
+                    # Hloubkovou indexaci spustíme asynchronně na pozadí
+                    import asyncio
+                    asyncio.create_task(ct_service.scrape_show_metadata(sidp))
         except Exception:
             pass
 
@@ -425,15 +500,10 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         })
         return cors_response({"streams": streams})
 
-    # 2. Epizoda pořadu přímo podle IDEC
-    if id_clean.startswith("ct_ep_"):
-        idec = id_clean.replace("ct_ep_", "")
-        stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
-        
-        # Zjištění titulků
+    async def build_stremio_stream_list(idec_code: str, title_label: str) -> list:
         subs = []
         try:
-            vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=True)
+            vod_info = await ct_service.resolve_vod_stream(idec_code, allow_drm=False)
             if vod_info and vod_info.get("subtitles"):
                 for s in vod_info["subtitles"]:
                     raw_sub = s.get("url", "")
@@ -444,22 +514,39 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
                             "lang": "ces" if s.get("language") in ["cs", "ces", "cze"] else s.get("language", "ces")
                         })
         except Exception as e:
-            logger.debug(f"Subtitles resolve failed for {idec}: {e}")
+            logger.debug(f"Subtitles resolve failed for {idec_code}: {e}")
 
-        stream_obj = {
-            "name": "Česká televize (iVysílání)",
-            "title": "[iVysílání] 1080p HLS",
-            "url": stream_url
-        }
-        if subs:
-            stream_obj["subtitles"] = subs
+        qualities = [
+            ("Adaptivní Auto", "", "až 1080p Full HD • Auto adaptivní"),
+            ("1080p Full HD", "1080p", "1080p Full HD (6.3 Mbps)"),
+            ("720p HD", "720p", "720p HD (3.7 Mbps)"),
+            ("576p SD", "576p", "576p SD (2.2 Mbps)")
+        ]
+        res_streams = []
+        for q_name, q_val, q_desc in qualities:
+            q_param = f"?quality={q_val}" if q_val else ""
+            stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec_code}.m3u8{q_param}"
+            s_obj = {
+                "name": f"[iVysílání] {q_name}",
+                "title": f"{title_label}\n{q_desc} • ČT HLS",
+                "url": stream_url
+            }
+            if subs:
+                s_obj["subtitles"] = subs
+            res_streams.append(s_obj)
+        return res_streams
 
-        streams.append(stream_obj)
+    # 2. Epizoda pořadu přímo podle IDEC
+    if id_clean.startswith("ct_ep_"):
+        idec = id_clean.replace("ct_ep_", "")
+        streams = await build_stremio_stream_list(idec, "[iVysílání] Pořad ČT")
         return cors_response({"streams": streams})
 
-    # 3. Pořad přímo podle ČT show_id (film nebo seriál: ct_show_{id}:{season}:{episode})
-    if id_clean.startswith("ct_show_"):
+    # 3. Pořad přímo podle ČT show_id (film nebo seriál: ct_show_{id}:{season}:{episode} nebo ct_{id}:{season}:{episode})
+    if id_clean.startswith("ct_show_") or (id_clean.startswith("ct_") and not id_clean.startswith("ct_ep_")):
         raw_id = id_clean.replace("ct_show_", "")
+        if raw_id.startswith("ct_"):
+            raw_id = raw_id[3:]
         parts = raw_id.split(":")
         show_id = parts[0]
         has_ep_params = len(parts) > 1
@@ -497,36 +584,10 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
                 target_ep = playable_episodes[0]
 
             idec = target_ep["idec"]
-            stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
-            
-            subs = []
-            try:
-                vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=True)
-                if vod_info and vod_info.get("subtitles"):
-                    for s in vod_info["subtitles"]:
-                        raw_sub = s.get("url", "")
-                        if raw_sub:
-                            subs.append({
-                                "id": s.get("language", "ces"),
-                                "url": f"{base_url}/api/subtitles?url={urllib.parse.quote(raw_sub, safe='')}",
-                                "lang": "ces" if s.get("language") in ["cs", "ces", "cze"] else s.get("language", "ces")
-                            })
-            except Exception as e:
-                logger.debug(f"Subtitles resolve failed for {idec}: {e}")
-
             show_title = show["title"] if show else target_ep.get("title", "iVysílání")
             ep_title = target_ep.get("title") or show_title
-            label = f"[iVysílání] {show_title} - S{season_num:02d}E{ep_num:02d} (1080p HLS)" if has_ep_params else f"[iVysílání] {show_title} (1080p HLS)"
-
-            stream_obj = {
-                "name": "Česká televize (iVysílání)",
-                "title": label,
-                "url": stream_url
-            }
-            if subs:
-                stream_obj["subtitles"] = subs
-
-            streams.append(stream_obj)
+            label = f"[iVysílání] {show_title} - S{season_num:02d}E{ep_num:02d}" if has_ep_params else f"[iVysílání] {show_title}"
+            streams = await build_stremio_stream_list(idec, label)
             return cors_response({"streams": streams})
 
     # 4. IMDb ID (tt...) nebo TMDB ID (tmdb:...) ze Stremio Cinemeta katalogu
@@ -583,34 +644,10 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
 
             if target_ep:
                 idec = target_ep["idec"]
-                stream_url = f"{base_url}/movie/{u_name}/{u_pass}/{idec}.m3u8"
-                subs = []
-                try:
-                    vod_info = await ct_service.resolve_vod_stream(idec, allow_drm=True)
-                    if vod_info and vod_info.get("subtitles"):
-                        for s in vod_info["subtitles"]:
-                            raw_sub = s.get("url", "")
-                            if raw_sub:
-                                subs.append({
-                                    "id": s.get("language", "ces"),
-                                    "url": f"{base_url}/api/subtitles?url={urllib.parse.quote(raw_sub, safe='')}",
-                                    "lang": "ces" if s.get("language") in ["cs", "ces", "cze"] else s.get("language", "ces")
-                                })
-                except Exception as e:
-                    logger.debug(f"Subtitles resolve failed for {idec}: {e}")
-
-                title_label = f"[iVysílání] {show['title']} (1080p HLS)"
+                title_label = f"[iVysílání] {show['title']}"
                 if show.get("show_type") != "movie":
-                    title_label = f"[iVysílání] {show['title']} - S{season_num:02d}E{ep_num:02d} (1080p HLS)"
-
-                stream_obj = {
-                    "name": "Česká televize (iVysílání)",
-                    "title": title_label,
-                    "url": stream_url
-                }
-                if subs:
-                    stream_obj["subtitles"] = subs
-                streams.append(stream_obj)
+                    title_label = f"[iVysílání] {show['title']} - S{season_num:02d}E{ep_num:02d}"
+                streams = await build_stremio_stream_list(idec, title_label)
                 return cors_response({"streams": streams})
 
     return cors_response({"streams": []})

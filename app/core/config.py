@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     CRAWL_INTERVAL_HOURS: int = 24
     
     # User Agent pro ČT API
-    USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0"
+    USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 settings = Settings()
 

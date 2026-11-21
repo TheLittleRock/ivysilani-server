@@ -27,6 +27,8 @@
             }
         }
     </script>
+    <!-- Mux.js (Transmuxer for HLS TS segments in Shaka Player) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mux.js/6.0.1/mux.min.js"></script>
     <!-- Shaka Player UI (DASH Widevine DRM + HLS + Quality Selection) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css" />
@@ -99,18 +101,65 @@
                 {% endif %}
             </nav>
 
-            <!-- Uživatelský profil / Odhlášení -->
-            <div class="flex items-center space-x-3">
+            <!-- Uživatelský profil / Odhlášení & Mobile menu button -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
                 {% if user %}
                 <div class="text-xs text-slate-400 hidden sm:block">
                     Přihlášen: <span class="font-semibold text-white">{{ user.username }}</span>
                 </div>
-                <a href="/logout" class="text-xs bg-slate-800 hover:bg-red-900/60 text-slate-300 hover:text-red-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+                <a href="/logout" class="hidden sm:inline-block text-xs bg-slate-800 hover:bg-red-900/60 text-slate-300 hover:text-red-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
                     Odhlásit
                 </a>
                 {% else %}
-                <a href="/login" class="text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-3.5 py-1.5 rounded-lg shadow-sm transition">
+                <a href="/login" class="hidden sm:inline-block text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-3.5 py-1.5 rounded-lg shadow-sm transition">
                     Přihlásit
+                </a>
+                {% endif %}
+
+                <!-- Hamburger button for mobile -->
+                <button id="mobile-menu-btn" type="button" class="md:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition focus:outline-none" aria-label="Otevřít menu">
+                    <i class="fa-solid fa-bars text-xl" id="menu-icon"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Drawer -->
+        <div id="mobile-menu" class="hidden md:hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur px-4 pt-3 pb-4 space-y-1.5">
+            <a href="/" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'live' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <i class="fa-solid fa-satellite-dish text-xs w-5"></i>
+                <span>Živě (Live TV)</span>
+            </a>
+            <a href="/archive" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'archive' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <i class="fa-solid fa-film text-xs w-5"></i>
+                <span>Archiv (VOD)</span>
+            </a>
+            <a href="/downloads" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'downloads' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <i class="fa-solid fa-download text-xs w-5"></i>
+                <span>Stahování</span>
+            </a>
+            <a href="/xtream" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'xtream' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <i class="fa-solid fa-tv text-xs w-5"></i>
+                <span>IPTV (M3U & EPG)</span>
+            </a>
+            <a href="/stremio" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'stremio' %}bg-purple-600 text-white{% else %}text-purple-300 hover:bg-purple-950/50 hover:text-purple-200{% endif %}">
+                <i class="fa-solid fa-play text-xs w-5"></i>
+                <span>Stremio Addon</span>
+            </a>
+            {% if user and user.is_admin %}
+            <a href="/admin" class="px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center space-x-2.5 {% if active_tab == 'admin' %}bg-blue-600 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
+                <i class="fa-solid fa-users-gear text-xs w-5"></i>
+                <span>Administrace</span>
+            </a>
+            {% endif %}
+            <div class="pt-3 mt-2 border-t border-slate-800 flex items-center justify-between px-1">
+                {% if user %}
+                <span class="text-xs text-slate-400">Uživatel: <strong class="text-white">{{ user.username }}</strong></span>
+                <a href="/logout" class="text-xs bg-red-950/60 hover:bg-red-800 text-red-300 hover:text-white px-3 py-1.5 rounded-lg border border-red-800/60 transition">
+                    <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Odhlásit
+                </a>
+                {% else %}
+                <a href="/login" class="text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition shadow-sm w-full text-center">
+                    Přihlásit se
                 </a>
                 {% endif %}
             </div>
@@ -150,6 +199,23 @@
             </div>
         </div>
     </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('mobile-menu-btn');
+            const menu = document.getElementById('mobile-menu');
+            const icon = document.getElementById('menu-icon');
+            if (btn && menu) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isHidden = menu.classList.toggle('hidden');
+                    if (icon) {
+                        icon.className = isHidden ? 'fa-solid fa-bars text-xl' : 'fa-solid fa-xmark text-xl';
+                    }
+                });
+            }
+        });
+    </script>
 
     {% block extra_scripts %}{% endblock %}
 </body>
