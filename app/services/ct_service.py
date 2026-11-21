@@ -283,57 +283,92 @@ class CTService:
         return subtitles
 
     async def resolve_live_stream(self, ch_key: str, allow_drm: bool = True) -> Optional[Dict[str, Any]]:
-        """Získá aktuální manifest živého vysílání (HbbTV unencrypted HLS s fallbackem/doplněním na DASH Widevine)."""
+        """Získá aktuální manifest živého vysílání (čistý nešifrovaný 1080p HLS stream bez DRM hlášek, s volitelným DASH)."""
         norm_key = CHANNEL_KEY_MAP.get(ch_key.lower(), ch_key)
         cached = self._cache.get(f"live_{norm_key}")
         if cached and cached["expiry"] > time.time():
-            return cached["data"]
+            raw = cached["raw"]
+        else:
+            # 1. HbbTV profil - poskytuje neblokovaný, nešifrovaný 1080p HLS stream
+            hbbtv_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{norm_key}?streamType=hls&origin=hbbtv&canPlayDrm=false"
+            # 2. DASH Widevine stream pro prohlížeč/Shaka
+            dash_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{norm_key}?canPlayDrm=true&quality=web&streamType=dash"
 
-        # 1. HbbTV profil - poskytuje neblokovaný, nešifrovaný 1080p HLS stream
-        hbbtv_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{norm_key}?streamType=hls&origin=hbbtv&canPlayDrm=false"
-        # 2. DASH Widevine stream pro prohlížeč/Shaka
-        dash_url = f"https://api.ceskatelevize.cz/video/v1/playlist-live/v1/stream-data/channel/{norm_key}?canPlayDrm=true&quality=web&streamType=dash"
+            try:
+                async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
+                    hls_resp = await client.get(hbbtv_url)
+                    dash_resp = await client.get(dash_url)
 
-        try:
-            async with httpx.AsyncClient(headers=self._headers, timeout=10.0) as client:
-                hls_resp = await client.get(hbbtv_url)
-                dash_resp = await client.get(dash_url)
+                    hls_data = hls_resp.json() if hls_resp.status_code == 200 else {}
+                    dash_data = dash_resp.json() if dash_resp.status_code == 200 else {}
 
-                hls_data = hls_resp.json() if hls_resp.status_code == 200 else {}
-                dash_data = dash_resp.json() if dash_resp.status_code == 200 else {}
+                    hls_main = hls_data.get("streamUrls", {}).get("main")
+                    timeshift_url = hls_data.get("streamUrls", {}).get("timeshift")
+                    dash_main = dash_data.get("streamUrls", {}).get("main")
 
-                hls_main = hls_data.get("streamUrls", {}).get("main")
-                timeshift_url = hls_data.get("streamUrls", {}).get("timeshift")
-                dash_main = dash_data.get("streamUrls", {}).get("main")
+                    if not hls_main and not dash_main and not timeshift_url:
+                        return None
 
-                if not hls_main and not dash_main:
-                    return None
+                    is_drm = False
+                    if (dash_data.get("streamUrls", {}).get("encryption") == "wv" or 
+                        "drmOnly=true" in (dash_main or "") or 
+                        dash_data.get("streamUrls", {}).get("drmOnly") is True):
+                        is_drm = True
 
-                is_drm = False
-                if not hls_main and dash_main and ("drmOnly=true" in dash_main or dash_data.get("streamUrls", {}).get("encryption") == "wv"):
-                    is_drm = True
+                    raw = {
+                        "norm_key": norm_key,
+                        "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS.get(norm_key, {}).get("name", "ČT"),
+                        "hls_main": hls_main,
+                        "dash_main": dash_main,
+                        "timeshift_url": timeshift_url,
+                        "is_drm": is_drm,
+                        "qualities": hls_data.get("availableQualities") or dash_data.get("availableQualities", []),
+                        "audio_tracks": hls_data.get("audioTracks") or dash_data.get("audioTracks", []),
+                        "subtitles": self._extract_subtitles(hls_data.get("subtitles") or dash_data.get("subtitles", []))
+                    }
+                    self._cache[f"live_{norm_key}"] = {
+                        "raw": raw,
+                        "expiry": time.time() + 300  # Obnova CDN tokenu každých 5 minut
+                    }
+            except Exception as e:
+                logger.error(f"Error resolving live stream for {norm_key}: {e}")
+                return None
 
-                result = {
-                    "channel_id": norm_key,
-                    "title": hls_data.get("title") or dash_data.get("title") or LIVE_CHANNELS.get(norm_key, {}).get("name", "ČT"),
-                    "url": hls_main or dash_main,
-                    "hls_url": hls_main,
-                    "dash_url": dash_main,
-                    "timeshift_url": timeshift_url,
-                    "is_drm": is_drm,
-                    "manifest_type": "hls" if hls_main else "mpd",
-                    "qualities": hls_data.get("availableQualities") or dash_data.get("availableQualities", []),
-                    "audio_tracks": hls_data.get("audioTracks") or dash_data.get("audioTracks", []),
-                    "subtitles": self._extract_subtitles(hls_data.get("subtitles") or dash_data.get("subtitles", []))
-                }
-                self._cache[f"live_{norm_key}"] = {
-                    "data": result,
-                    "expiry": time.time() + 1800
-                }
-                return result
-        except Exception as e:
-            logger.error(f"Error resolving live stream for {norm_key}: {e}")
-            return None
+        # Dynamický sliding timeshift window (posledních 60 sekund) zaručuje čistý stream bez červené DRM hlášky
+        timeshift_url = raw.get("timeshift_url")
+        hls_main = raw.get("hls_main")
+        dash_main = raw.get("dash_main")
+        is_drm = raw.get("is_drm", False)
+
+        clean_hls = None
+        if timeshift_url:
+            clean_hls = f"{timeshift_url}&start={int(time.time()) - 60}&duration=14400"
+
+        # Pokud je na stanici aktivní DRM (např. StarDance, zahraniční filmy), na hls_main ČT vysílá
+        # varovnou statickou smyčku "Pořad nelze přehrát v tomto prohlížeči". Timeshift endpoint
+        # naproti tomu poskytuje plně nešifrovaný čistý 1080p stream s titulky i vícejazyčným audiem.
+        effective_hls = (clean_hls if is_drm else hls_main) or clean_hls or hls_main
+
+        if allow_drm and is_drm and dash_main:
+            chosen_url = dash_main
+            m_type = "mpd"
+        else:
+            chosen_url = effective_hls or dash_main
+            m_type = "hls" if effective_hls else "mpd"
+
+        return {
+            "channel_id": raw["norm_key"],
+            "title": raw["title"],
+            "url": chosen_url,
+            "hls_url": effective_hls,
+            "dash_url": dash_main,
+            "timeshift_url": timeshift_url,
+            "is_drm": is_drm,
+            "manifest_type": m_type,
+            "qualities": raw["qualities"],
+            "audio_tracks": raw["audio_tracks"],
+            "subtitles": raw["subtitles"]
+        }
 
     async def get_live_epg_now(self) -> Dict[str, Dict[str, Any]]:
         """Vrátí aktuální a následující pořad pro všechny živé stanice z ČT GraphQL."""
@@ -506,14 +541,15 @@ class CTService:
         url = "https://api.ceskatelevize.cz/graphql/"
         params = {"client": "iVysilaniWeb", "version": "1.131.1", "use-new-playability": "true"}
         query = """
-        query GetEpisodes($programmeId: String!, $seasonId: String, $limit: PaginationAmount!, $offset: Int!, $orderBy: EpisodeOrderByType!, $keyword: String, $onlyPlayable: Boolean) {
-          programme(programmeId: $programmeId) {
+        query GetEpisodes($id: String!, $seasonId: String, $limit: PaginationAmount!, $offset: Int!, $orderBy: EpisodeOrderByType, $keyword: String, $onlyPlayable: Boolean) {
+          programme(legacySidpOrIdp: $id) {
             id
             episodes(seasonId: $seasonId, limit: $limit, offset: $offset, orderBy: $orderBy, keyword: $keyword, onlyPlayable: $onlyPlayable) {
               totalCount
               items {
                 id
                 title
+                idec
                 description
                 duration
                 season { id title }
@@ -526,7 +562,7 @@ class CTService:
         }
         """
         variables = {
-            "programmeId": programme_id,
+            "id": str(programme_id),
             "seasonId": season_id,
             "limit": limit,
             "offset": offset,

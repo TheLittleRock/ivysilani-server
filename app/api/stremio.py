@@ -160,30 +160,6 @@ def build_manifest(base_url: str, token: Optional[str] = None, is_streamcube: bo
             ]
         },
         {
-            "type": "movie",
-            "id": "ct_movies_czech",
-            "name": "iVysílání: České filmy",
-            "extra": [{"name": "search"}, {"name": "skip"}]
-        },
-        {
-            "type": "movie",
-            "id": "ct_movies_foreign",
-            "name": "iVysílání: Zahraniční filmy",
-            "extra": [{"name": "search"}, {"name": "skip"}]
-        },
-        {
-            "type": "movie",
-            "id": "ct_movies_pohadky",
-            "name": "iVysílání: Pohádky",
-            "extra": [{"name": "search"}, {"name": "skip"}]
-        },
-        {
-            "type": "movie",
-            "id": "ct_movies_doc",
-            "name": "iVysílání: Dokumentární filmy",
-            "extra": [{"name": "search"}, {"name": "skip"}]
-        },
-        {
             "type": "series",
             "id": "ct_documentaries",
             "name": "iVysílání: Dokumenty",
@@ -223,7 +199,7 @@ def build_manifest(base_url: str, token: Optional[str] = None, is_streamcube: bo
 
     manifest = {
         "id": "cz.thelittlerock.ivysilani.streamcube" if is_streamcube else "cz.thelittlerock.ivysilani",
-        "version": "1.3.2",
+        "version": "2.1.0",
         "name": "Česká televize (StreamCube)" if is_streamcube else "Česká televize (iVysílání)",
         "description": "Kompletní filmový a seriálový archiv České televize (iVysílání), živé vysílání 14 stanic ČT s EPG a IPTV podporou." if is_streamcube else "Kompletní filmový a seriálový archiv České televize (iVysílání) s českým dabingem a titulky.",
         "logo": f"{base_url}/static/logos/ct1.png",

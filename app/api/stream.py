@@ -105,20 +105,23 @@ async def get_hls_master_playlist(
             base_url = f"{forwarded_proto}://{forwarded_host}"
 
             has_subtitles = bool(data.get("subtitles"))
+            lines = master_text.splitlines()
+            has_existing_subs = any(l.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES") for l in lines)
             sub_line = f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Čeština",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="cs",URI="{base_url}/api/hls/subtitles/{idec}.m3u8"'
 
-            lines = master_text.splitlines()
             out_lines = []
             sub_injected = False
             skip_next_stream = False
 
             for line in lines:
-                if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+                if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO") or line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
                     out_lines.append(line)
-                    if has_subtitles and not sub_injected:
+                elif line.startswith("#EXT-X-STREAM-INF:"):
+                    # Pokud ČT nemá v master playlistu žádné titulky, ale my máme externí WebVTT, vložíme je před první variantu
+                    if has_subtitles and not has_existing_subs and not sub_injected:
                         out_lines.append(sub_line)
                         sub_injected = True
-                elif line.startswith("#EXT-X-STREAM-INF:"):
+
                     bw_match = re.search(r"BANDWIDTH=(\d+)", line)
                     bw = int(bw_match.group(1)) if bw_match else 0
                     keep = True
@@ -130,7 +133,7 @@ async def get_hls_master_playlist(
                         keep = False
 
                     if keep:
-                        if has_subtitles and 'SUBTITLES=' not in line:
+                        if has_subtitles and not has_existing_subs and 'SUBTITLES=' not in line:
                             line += ',SUBTITLES="subs"'
                         out_lines.append(line)
                         skip_next_stream = False
@@ -144,14 +147,15 @@ async def get_hls_master_playlist(
             # Fallback pokud filtr kvality nic nezanechal
             if not any(l.startswith("#EXT-X-STREAM-INF:") for l in out_lines):
                 out_lines = []
+                sub_injected = False
                 for line in lines:
-                    if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+                    if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO") or line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
                         out_lines.append(line)
-                        if has_subtitles and not sub_injected:
+                    elif line.startswith("#EXT-X-STREAM-INF:"):
+                        if has_subtitles and not has_existing_subs and not sub_injected:
                             out_lines.append(sub_line)
                             sub_injected = True
-                    elif line.startswith("#EXT-X-STREAM-INF:"):
-                        if has_subtitles and 'SUBTITLES=' not in line:
+                        if has_subtitles and not has_existing_subs and 'SUBTITLES=' not in line:
                             line += ',SUBTITLES="subs"'
                         out_lines.append(line)
                     else:

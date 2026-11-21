@@ -97,6 +97,57 @@ XTREAM_SERIES_CATEGORIES = [
     {"category_id": "15", "category_name": "Zpravodajství & Publicistika", "genre_key": "Zpravodaj"}
 ]
 
+VOD_STEM_MAP = {
+    "18": ["dokument", "publicist"],
+    "14": ["animov"],
+    "5":  ["pohád"],
+    "2":  ["krimi", "detektiv"],
+    "3":  ["komed"],
+    "13": ["thriller"],
+    "16": ["váleč", "válk"],
+    "17": ["student", "famu"],
+    "7":  ["histor"],
+    "12": ["životopis", "biograf"],
+    "11": ["romant"],
+    "6":  ["psycholog"],
+    "8":  ["rodin"],
+    "9":  ["klasik"],
+    "10": ["drama"],
+    "4":  ["zahranič"],
+    "1":  ["česk"],
+}
+
+SERIES_STEM_MAP = {
+    "15": ["zpravodaj", "politika", "zprávy", "události", "počasí"],
+    "14": ["dět", "večerníč", "animov", "pohád"],
+    "13": ["zábav", "talk show", "soutěž", "hudeb", "reality"],
+    "12": ["dokument", "publicist", "příroda", "věda"],
+    "11": ["student", "famu"],
+    "2":  ["krimi", "detektiv"],
+    "3":  ["komed"],
+    "9":  ["thriller"],
+    "7":  ["histor"],
+    "6":  ["psycholog"],
+    "5":  ["rodin"],
+    "8":  ["klasik"],
+    "4":  ["zahranič"],
+    "1":  ["česk"],
+}
+
+def resolve_vod_category_id(genre_str: str) -> str:
+    g = (genre_str or "").lower()
+    for cat_id, stems in VOD_STEM_MAP.items():
+        if any(s in g for s in stems):
+            return cat_id
+    return "1"
+
+def resolve_series_category_id(genre_str: str) -> str:
+    g = (genre_str or "").lower()
+    for cat_id, stems in SERIES_STEM_MAP.items():
+        if any(s in g for s in stems):
+            return cat_id
+    return "1"
+
 # Mapování stream_id <-> kanál
 CHANNEL_STREAM_MAP = {
     1: "CH_1",
@@ -307,13 +358,7 @@ async def player_api(
             movies = crud.list_playable_movies_with_idec(genre=genre_filter)
             vod_streams = []
             for idx, m in enumerate(movies, start=1):
-                cat_id = "1"
-                g = m.get("genre", "")
-                for c in XTREAM_VOD_CATEGORIES:
-                    if c["genre_key"].lower() in g.lower():
-                        cat_id = c["category_id"]
-                        break
-
+                cat_id = resolve_vod_category_id(m.get("genre", ""))
                 idec = m.get("idec") or m["id"]
                 poster_raw = m.get("tmdb_poster") or m.get("poster_url") or m.get("image_url")
                 poster_url = image_proxy.build_proxy_url(base_url, poster_raw, pad="2x3")
@@ -381,13 +426,7 @@ async def player_api(
             shows = crud.list_series(genre=genre_filter, only_playable=True, limit=None)
             series_list = []
             for idx, s in enumerate(shows, start=1):
-                cat_id = "1"
-                g = s.get("genre", "")
-                for c in XTREAM_SERIES_CATEGORIES:
-                    if c["genre_key"].lower() in g.lower():
-                        cat_id = c["category_id"]
-                        break
-
+                cat_id = resolve_series_category_id(s.get("genre", ""))
                 cover_raw = s.get("tmdb_poster") or s.get("poster_url") or s.get("image_url")
                 cover_proxy = image_proxy.build_proxy_url(base_url, cover_raw, pad="2x3")
                 backdrop_proxy = image_proxy.build_proxy_url(base_url, s.get("tmdb_backdrop") or s.get("backdrop_url") or cover_raw)
@@ -412,16 +451,20 @@ async def player_api(
 
         if action == "get_series_info":
             s_id = str(series_id) if series_id else ""
-            show = crud.get_show_by_id(s_id)
+            s_id_clean = s_id.split("-")[0]
+            show = crud.get_show_by_id(s_id) or crud.get_show_by_id(s_id_clean)
             if not show:
                 try:
-                    show = await ct_service.scrape_show_metadata(s_id)
+                    show = await ct_service.scrape_show_metadata(s_id) or await ct_service.scrape_show_metadata(s_id_clean)
                 except Exception:
                     pass
             if not show:
                 return {"seasons": [], "episodes": {}}
 
-            episodes = crud.get_episodes_by_show(s_id)
+            actual_id = show.get("id") or s_id_clean
+            episodes = crud.get_episodes_by_show(actual_id)
+            if not episodes and actual_id != s_id:
+                episodes = crud.get_episodes_by_show(s_id)
             playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
 
             seasons_set = set()
@@ -508,17 +551,13 @@ def parse_catchup_timestamp(raw_time: Optional[str]) -> Optional[int]:
                 return val // 1000
             return val
 
-        # TiviMate / XC timeshift formát: YYYY-MM-DD:HH-MM nebo YYYY-MM-DD:HH-MM-SS
-        if ":" in raw and "-" in raw and "T" not in raw:
-            parts = raw.split(":")
-            if len(parts) >= 2:
-                date_part = parts[0]
-                h = int(parts[1])
-                m = int(parts[2]) if len(parts) > 2 else 0
-                s = int(parts[3]) if len(parts) > 3 else 0
-                y, mo, d = [int(x) for x in date_part.split("-")]
-                dt = datetime(y, mo, d, h, m, s, tzinfo=tz_prague)
-                return int(dt.timestamp())
+        # TiviMate / XC timeshift formát: YYYY-MM-DD:HH-MM nebo YYYY-MM-DD:HH-MM-SS nebo s mezerou
+        import re
+        m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})[: ](\d{1,2})[-:](\d{1,2})(?:[-:](\d{1,2}))?$", raw)
+        if m:
+            y, mo, d, h, mi, s = m.groups()
+            dt = datetime(int(y), int(mo), int(d), int(h), int(mi), int(s or 0), tzinfo=tz_prague)
+            return int(dt.timestamp())
 
         # ISO formáty
         if "T" in raw or "-" in raw:
@@ -618,9 +657,9 @@ async def timeshift_stream(
     dur_secs = 3600
     if duration and not duration.startswith("${"):
         try:
-            dur_secs = int(float(duration))
-            if dur_secs <= 0:
-                dur_secs = 3600
+            dur_val = int(float(duration))
+            if dur_val > 0:
+                dur_secs = dur_val * 60 if dur_val < 300 else dur_val
         except Exception:
             dur_secs = 3600
 
@@ -645,6 +684,62 @@ async def timeshift_stream(
         stream_url += f"{join_char}start={ts}&duration={dur_secs}"
 
     return RedirectResponse(url=stream_url, status_code=302)
+
+@router.api_route("/timeshift/{username}/{password}/{duration}/{start}/{stream_filename}", methods=["GET", "HEAD"])
+@router.api_route("/timeshift/{token}/{duration}/{start}/{stream_filename}", methods=["GET", "HEAD"])
+async def timeshift_direct_stream(
+    request: Request,
+    stream_filename: str,
+    duration: str,
+    start: str,
+    token: Optional[str] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None
+):
+    """Přímý Xtream Codes Timeshift/Catch-up endpoint pro IPTVnator, TiviMate a další přehrávače."""
+    check_auth(username=username, password=password, token=token)
+    stream_id_str = stream_filename.split(".")[0]
+    try:
+        s_id = int(stream_id_str)
+        ch_code = CHANNEL_STREAM_MAP.get(s_id)
+    except ValueError:
+        ch_code = stream_id_str.upper()
+
+    if not ch_code or ch_code not in LIVE_CHANNELS:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    ch = LIVE_CHANNELS[ch_code]
+    ts = parse_catchup_timestamp(start)
+    if not ts:
+        logger.warning(f"Timeshift start time could not be parsed: {start}")
+        ts = int(time.time()) - 3600
+
+    dur_secs = 3600
+    try:
+        dur_val = int(float(duration))
+        if dur_val > 0:
+            dur_secs = dur_val * 60 if dur_val < 300 else dur_val
+    except Exception:
+        dur_secs = 3600
+
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+    base_url = f"{forwarded_proto}://{forwarded_host}"
+
+    # 1. Look up EPG programme by time for VOD playback
+    prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
+    if prog and prog.get("idec"):
+        logger.info(f"Timeshift direct VOD match found for {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
+        return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
+
+    # 2. Fallback na ČT unencrypted HbbTV timeshift stream
+    stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
+    if not stream_data or not stream_data.get("timeshift_url"):
+        raise HTTPException(status_code=503, detail="Timeshift stream not available")
+
+    ts_url = stream_data["timeshift_url"]
+    join_char = "&" if "?" in ts_url else "?"
+    return RedirectResponse(url=f"{ts_url}{join_char}start={ts}&duration={dur_secs}", status_code=302)
 
 @router.api_route("/movie/{token}/{stream_filename}", methods=["GET", "HEAD"])
 @router.api_route("/series/{token}/{stream_filename}", methods=["GET", "HEAD"])
