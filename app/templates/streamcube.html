@@ -39,19 +39,54 @@
         </div>
     </div>
 
-    <!-- Adresa doplňku (Manifest URL) -->
+    <!-- 1. Způsob: Adresa doplňku (Manifest URL pro StreamCube Addon) -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
-        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Adresa manifestu doplňku pro StreamCube (URL)</h3>
+        <div class="flex items-center space-x-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center">1</span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Nativní doplněk StreamCube (Addon Manifest)</h3>
+        </div>
         <div class="flex items-center space-x-2">
             <input id="manifest-input" type="text" readonly value="{{ manifest_url }}"
                    class="flex-grow px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs sm:text-sm text-indigo-300 select-all focus:outline-none focus:border-indigo-500" />
-            <button onclick="copyManifestUrl(this)" class="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shrink-0">
+            <button onclick="copyToClipboard('manifest-input', this)" class="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shrink-0">
                 Kopírovat
             </button>
         </div>
         <p class="text-[11px] text-slate-400">
-            Ve StreamCube přejděte do <strong>Nastavení &rarr; Addony (Doplňky) &rarr; Přidat addon</strong> a vložte tuto URL adresu.
+            Ve StreamCube přejděte do <strong>Nastavení &rarr; Addony (Doplňky) &rarr; Přidat addon</strong> a vložte tuto URL adresu manifestu.
         </p>
+    </div>
+
+    <!-- 2. Způsob: StreamCube IPTV (M3U playlist & EPG program) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center space-x-2">
+            <span class="w-6 h-6 rounded-full bg-emerald-600/30 text-emerald-400 font-bold text-xs flex items-center justify-center">2</span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">StreamCube IPTV / M3U Playlist &amp; EPG</h3>
+        </div>
+        <p class="text-xs text-slate-400">Pokud StreamCube používáte v režimu IPTV / Live TV přehrávače, můžete přímo importovat M3U playlist a XMLTV průvodce:</p>
+        
+        <div class="space-y-3">
+            <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1">M3U Playlist URL (1080p unencrypted HLS):</label>
+                <div class="flex items-center space-x-2">
+                    <input id="m3u-input" type="text" readonly value="{{ m3u_url }}"
+                           class="flex-grow px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs text-emerald-300 select-all focus:outline-none focus:border-emerald-500" />
+                    <button onclick="copyToClipboard('m3u-input', this)" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition shrink-0">
+                        Kopírovat
+                    </button>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1">XMLTV EPG URL (program na 14 dní):</label>
+                <div class="flex items-center space-x-2">
+                    <input id="epg-input" type="text" readonly value="{{ epg_url }}"
+                           class="flex-grow px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs text-cyan-300 select-all focus:outline-none focus:border-cyan-500" />
+                    <button onclick="copyToClipboard('epg-input', this)" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition shrink-0">
+                        Kopírovat
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Vlastnosti a výhody doplňku -->
@@ -92,19 +127,24 @@
 
 {% block extra_scripts %}
 <script>
-    function copyManifestUrl(btn) {
-        const input = document.getElementById('manifest-input');
+    function copyToClipboard(elementId, btn) {
+        const input = document.getElementById(elementId);
+        if (!input) return;
         input.select();
         input.setSelectionRange(0, 99999);
         navigator.clipboard.writeText(input.value);
 
         if (btn) {
             const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-check"></i> <span>Zkopírováno!</span>';
+            btn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> <span>Zkopírováno!</span>';
             setTimeout(() => {
                 btn.innerHTML = originalHtml;
-            }, 2000);
+            }, 1800);
         }
+    }
+
+    function copyManifestUrl(btn) {
+        copyToClipboard('manifest-input', btn);
     }
 </script>
 {% endblock %}

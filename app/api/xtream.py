@@ -1,5 +1,6 @@
 import time
 import logging
+import base64
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional, Union, Any
@@ -154,7 +155,8 @@ async def player_api(
 
         base_url = get_base_url(request)
         now_ts = int(time.time())
-        now_dt = datetime.fromtimestamp(now_ts, timezone.utc)
+        tz_prague = ZoneInfo("Europe/Prague")
+        now_dt_prague = datetime.fromtimestamp(now_ts, tz_prague)
 
         # 1. Výchozí odpověď při přihlášení (žádná akce)
         if not action:
@@ -180,7 +182,7 @@ async def player_api(
                     "server_protocol": base_url.split("://")[0],
                     "rtmp_port": "8880",
                     "timezone": "Europe/Prague",
-                    "time_now": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "time_now": now_dt_prague.strftime("%Y-%m-%d %H:%M:%S"),
                     "timestamp_now": now_ts
                 }
             }
@@ -217,6 +219,74 @@ async def player_api(
                     "tv_archive_duration": 14
                 })
             return streams
+
+        # 3b. EPG pro kanály (Xtream get_simple_data_table / get_epg / get_short_epg)
+        if action in ["get_simple_data_table", "get_epg", "get_short_epg"]:
+            stream_id_req = request.query_params.get("stream_id") or stream_id
+            if not stream_id_req:
+                return {"epg_listings": []}
+            try:
+                s_id = int(stream_id_req)
+                ch_code = CHANNEL_STREAM_MAP.get(s_id)
+            except ValueError:
+                ch_code = str(stream_id_req).upper()
+
+            if not ch_code or ch_code not in LIVE_CHANNELS:
+                return {"epg_listings": []}
+
+            ch = LIVE_CHANNELS[ch_code]
+            epg_id = ch["epg_id"]
+
+            limit_val = 10 if action == "get_short_epg" else None
+            req_limit = request.query_params.get("limit")
+            if req_limit:
+                try:
+                    limit_val = int(req_limit)
+                except ValueError:
+                    pass
+
+            with crud.get_db() as conn:
+                cursor = conn.cursor()
+                min_ts = now_ts - (14 * 86400)
+                if limit_val:
+                    cursor.execute("""
+                    SELECT * FROM epg_programmes
+                    WHERE channel_id = ? AND end_ts >= ?
+                    ORDER BY start_ts ASC LIMIT ?
+                    """, (epg_id, now_ts - 3600, limit_val))
+                else:
+                    cursor.execute("""
+                    SELECT * FROM epg_programmes
+                    WHERE channel_id = ? AND start_ts >= ?
+                    ORDER BY start_ts ASC
+                    """, (epg_id, min_ts))
+                progs = cursor.fetchall()
+
+            epg_listings = []
+            for p in progs:
+                start_dt = datetime.fromtimestamp(p["start_ts"], tz_prague)
+                end_dt = datetime.fromtimestamp(p["end_ts"], tz_prague)
+                t_b64 = base64.b64encode((p["title"] or "").encode("utf-8")).decode("utf-8")
+                d_b64 = base64.b64encode((p["description"] or "").encode("utf-8")).decode("utf-8")
+                now_playing = 1 if (p["start_ts"] <= now_ts <= p["end_ts"]) else 0
+                has_archive = 1 if (now_ts - p["start_ts"] <= 14 * 86400) else 0
+
+                epg_listings.append({
+                    "id": p["id"],
+                    "epg_id": p["channel_id"],
+                    "title": t_b64,
+                    "lang": "cs",
+                    "start": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end": end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "description": d_b64,
+                    "channel_id": str(stream_id_req),
+                    "start_timestamp": str(p["start_ts"]),
+                    "stop_timestamp": str(p["end_ts"]),
+                    "now_playing": now_playing,
+                    "has_archive": has_archive
+                })
+
+            return {"epg_listings": epg_listings}
 
         # 4. VOD Kategorie (Filmy)
         if action == "get_vod_categories":
@@ -493,9 +563,17 @@ async def live_stream(
         prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
         if prog and prog.get("idec"):
             logger.info(f"Catchup v /live nalezen pro {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
-            vod_data = await ct_service.resolve_vod_stream(prog["idec"], allow_drm=True)
-            if vod_data and vod_data.get("url"):
-                return RedirectResponse(url=vod_data["url"], status_code=302)
+            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+            forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+            base_url = f"{forwarded_proto}://{forwarded_host}"
+            return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
+
+        # Fallback na ČT unencrypted HbbTV timeshift stream
+        stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
+        if stream_data and stream_data.get("timeshift_url"):
+            ts_url = stream_data["timeshift_url"]
+            join_char = "&" if "?" in ts_url else "?"
+            return RedirectResponse(url=f"{ts_url}{join_char}start={ts}&duration=3600", status_code=302)
 
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
     if not stream_data or not (stream_data.get("hls_url") or stream_data.get("url")):

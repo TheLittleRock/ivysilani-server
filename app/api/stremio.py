@@ -62,174 +62,191 @@ def parse_extra(extra_path: Optional[str]) -> dict:
             extra[k] = urllib.parse.unquote(v)
     return extra
 
-def build_manifest(base_url: str, token: Optional[str] = None) -> dict:
+def build_manifest(base_url: str, token: Optional[str] = None, is_streamcube: bool = False) -> dict:
     token_suffix = f"/{token}" if token else ""
-    return {
-        "id": "cz.thelittlerock.ivysilani",
-        "version": "1.3.1",
-        "name": "Česká televize (iVysílání)",
-        "description": "Kompletní filmový a seriálový archiv České televize (iVysílání), živé vysílání 14 stanic ČT, český dabing a titulky.",
+    auth_token = token or "active"
+
+    catalogs = []
+    # Live TV pouze pro StreamCube (uživatel si nepřeje živé vysílání ve Stremio doplňku)
+    if is_streamcube:
+        catalogs.append({
+            "type": "tv",
+            "id": "ct_live",
+            "name": "Česká televize: Živé vysílání"
+        })
+
+    # Seriály a filmy
+    catalogs.extend([
+        {
+            "type": "series",
+            "id": "ct_featured",
+            "name": "iVysílání: Doporučujeme (Seriály)",
+            "genres": [
+                "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
+                "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
+                "Napínavé kriminální případy", "Vyrobila Česká televize"
+            ],
+            "extra": [
+                {
+                    "name": "genre",
+                    "options": [
+                        "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
+                        "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
+                        "Napínavé kriminální případy", "Vyrobila Česká televize"
+                    ]
+                },
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        },
+        {
+            "type": "series",
+            "id": "ct_series",
+            "name": "iVysílání: Všechny seriály",
+            "genres": [
+                "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
+                "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
+            ],
+            "extra": [
+                {
+                    "name": "genre",
+                    "options": [
+                        "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
+                        "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
+                    ]
+                },
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        },
+        {
+            "type": "movie",
+            "id": "ct_featured_movie",
+            "name": "iVysílání: Doporučujeme (Filmy)",
+            "genres": [
+                "Vše", "Filmové tipy", "iVysílání doporučuje", "Nejsledovanější", "Klasika"
+            ],
+            "extra": [
+                {
+                    "name": "genre",
+                    "options": ["Vše", "Filmové tipy", "iVysílání doporučuje", "Nejsledovanější", "Klasika"]
+                },
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        },
+        {
+            "type": "movie",
+            "id": "ct_movies",
+            "name": "iVysílání: Všechny filmy",
+            "genres": [
+                "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
+                "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
+                "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
+                "Válečné", "Studentské"
+            ],
+            "extra": [
+                {
+                    "name": "genre",
+                    "options": [
+                        "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
+                        "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
+                        "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
+                        "Válečné", "Studentské"
+                    ]
+                },
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        },
+        {
+            "type": "movie",
+            "id": "ct_movies_czech",
+            "name": "iVysílání: České filmy",
+            "extra": [{"name": "search"}, {"name": "skip"}]
+        },
+        {
+            "type": "movie",
+            "id": "ct_movies_foreign",
+            "name": "iVysílání: Zahraniční filmy",
+            "extra": [{"name": "search"}, {"name": "skip"}]
+        },
+        {
+            "type": "movie",
+            "id": "ct_movies_pohadky",
+            "name": "iVysílání: Pohádky",
+            "extra": [{"name": "search"}, {"name": "skip"}]
+        },
+        {
+            "type": "movie",
+            "id": "ct_movies_doc",
+            "name": "iVysílání: Dokumentární filmy",
+            "extra": [{"name": "search"}, {"name": "skip"}]
+        },
+        {
+            "type": "series",
+            "id": "ct_documentaries",
+            "name": "iVysílání: Dokumenty",
+            "genres": ["Vše", "Příroda", "Historie", "Věda", "Lidé a společnost"],
+            "extra": [
+                {"name": "genre", "options": ["Vše", "Příroda", "Historie", "Věda", "Lidé a společnost"]},
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        },
+        {
+            "type": "series",
+            "id": "ct_entertainment",
+            "name": "iVysílání: Zábava",
+            "genres": ["Vše", "Talk show", "Soutěže", "Komedie", "Hudební"],
+            "extra": [
+                {
+                    "name": "genre",
+                    "options": ["Vše", "Talk show", "Soutěže", "Komedie", "Hudební"]
+                },
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        },
+        {
+            "type": "series",
+            "id": "ct_kids",
+            "name": "iVysílání: Pro děti",
+            "genres": ["Vše", "Večerníček", "Pohádky", "Animované", "Pro nejmenší"],
+            "extra": [
+                {"name": "genre", "options": ["Vše", "Večerníček", "Pohádky", "Animované", "Pro nejmenší"]},
+                {"name": "search"},
+                {"name": "skip"}
+            ]
+        }
+    ])
+
+    manifest = {
+        "id": "cz.thelittlerock.ivysilani.streamcube" if is_streamcube else "cz.thelittlerock.ivysilani",
+        "version": "1.3.2",
+        "name": "Česká televize (StreamCube)" if is_streamcube else "Česká televize (iVysílání)",
+        "description": "Kompletní filmový a seriálový archiv České televize (iVysílání), živé vysílání 14 stanic ČT s EPG a IPTV podporou." if is_streamcube else "Kompletní filmový a seriálový archiv České televize (iVysílání) s českým dabingem a titulky.",
         "logo": f"{base_url}/static/logos/ct1.png",
         "background": f"{base_url}/static/logos/ct1.png",
         "resources": ["catalog", "meta", "stream", "subtitles"],
-        "types": ["series", "movie", "tv"],
+        "types": ["series", "movie", "tv", "iptv", "stream"] if is_streamcube else ["series", "movie"],
         "idPrefixes": ["ct_", "tt", "tmdb:"],
-        "streamcube": {
+        "catalogs": catalogs
+    }
+
+    if is_streamcube:
+        manifest["streamcube"] = {
             "manifestVersion": 1,
             "addonType": "stream",
             "capabilities": ["stream", "iptv", "epg"],
-            "minAppVersion": "2.0.0"
-        },
-        "catalogs": [
-            {
-                "type": "tv",
-                "id": "ct_live",
-                "name": "Česká televize: Živé vysílání"
-            },
-            {
-                "type": "series",
-                "id": "ct_featured",
-                "name": "iVysílání: Doporučujeme (Seriály)",
-                "genres": [
-                    "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
-                    "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
-                    "Napínavé kriminální případy", "Vyrobila Česká televize"
-                ],
-                "extra": [
-                    {
-                        "name": "genre",
-                        "options": [
-                            "Vše", "Nejsledovanější", "Doporučujeme", "Ty nejlepší zahraniční seriály",
-                            "Novinky České televize", "Filmové tipy", "Dokumenty České televize",
-                            "Napínavé kriminální případy", "Vyrobila Česká televize"
-                        ]
-                    },
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
-            },
-            {
-                "type": "series",
-                "id": "ct_series",
-                "name": "iVysílání: Všechny seriály",
-                "genres": [
-                    "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
-                    "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
-                ],
-                "extra": [
-                    {
-                        "name": "genre",
-                        "options": [
-                            "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Rodinné",
-                            "Psychologické", "Historické", "Klasika", "Thrillery", "Literární adaptace", "Studentské"
-                        ]
-                    },
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
-            },
-            {
-                "type": "movie",
-                "id": "ct_featured_movie",
-                "name": "iVysílání: Doporučujeme (Filmy)",
-                "genres": [
-                    "Vše", "Filmové tipy", "iVysílání doporučuje", "Nejsledovanější", "Klasika"
-                ],
-                "extra": [
-                    {
-                        "name": "genre",
-                        "options": ["Vše", "Filmové tipy", "iVysílání doporučuje", "Nejsledovanější", "Klasika"]
-                    },
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
-            },
-            {
-                "type": "movie",
-                "id": "ct_movies",
-                "name": "iVysílání: Všechny filmy",
-                "genres": [
-                    "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
-                    "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
-                    "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
-                    "Válečné", "Studentské"
-                ],
-                "extra": [
-                    {
-                        "name": "genre",
-                        "options": [
-                            "Vše", "České", "Krimi", "Komedie", "Zahraniční", "Pohádky",
-                            "Psychologické", "Historické", "Rodinné", "Klasika", "Drama",
-                            "Romantické", "Životopisné", "Thriller", "Animované", "Literární adaptace",
-                            "Válečné", "Studentské"
-                        ]
-                    },
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
-            },
-            {
-                "type": "movie",
-                "id": "ct_movies_czech",
-                "name": "iVysílání: České filmy",
-                "extra": [{"name": "search"}, {"name": "skip"}]
-            },
-            {
-                "type": "movie",
-                "id": "ct_movies_foreign",
-                "name": "iVysílání: Zahraniční filmy",
-                "extra": [{"name": "search"}, {"name": "skip"}]
-            },
-            {
-                "type": "movie",
-                "id": "ct_movies_pohadky",
-                "name": "iVysílání: Pohádky",
-                "extra": [{"name": "search"}, {"name": "skip"}]
-            },
-            {
-                "type": "movie",
-                "id": "ct_movies_doc",
-                "name": "iVysílání: Dokumentární filmy",
-                "extra": [{"name": "search"}, {"name": "skip"}]
-            },
-            {
-                "type": "series",
-                "id": "ct_documentaries",
-                "name": "iVysílání: Dokumenty",
-                "genres": ["Vše", "Příroda", "Historie", "Věda", "Lidé a společnost"],
-                "extra": [
-                    {"name": "genre", "options": ["Vše", "Příroda", "Historie", "Věda", "Lidé a společnost"]},
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
-            },
-            {
-                "type": "series",
-                "id": "ct_entertainment",
-                "name": "iVysílání: Zábava",
-                "genres": ["Vše", "Talk show", "Soutěže", "Komedie", "Hudební"],
-                "extra": [
-                    {
-                        "name": "genre",
-                        "options": ["Vše", "Talk show", "Soutěže", "Komedie", "Hudební"]
-                    },
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
-            },
-            {
-                "type": "series",
-                "id": "ct_kids",
-                "name": "iVysílání: Pro děti",
-                "genres": ["Vše", "Večerníček", "Pohádky", "Animované", "Pro nejmenší"],
-                "extra": [
-                    {"name": "genre", "options": ["Vše", "Večerníček", "Pohádky", "Animované", "Pro nejmenší"]},
-                    {"name": "search"},
-                    {"name": "skip"}
-                ]
+            "minAppVersion": "2.0.0",
+            "iptv": {
+                "m3u": f"{base_url}/get.php?token={auth_token}",
+                "epg": f"{base_url}/xmltv.php?token={auth_token}"
             }
-        ]
-    }
+        }
+
+    return manifest
 
 @router.options("/{full_path:path}")
 async def stremio_options(full_path: str):
@@ -238,11 +255,13 @@ async def stremio_options(full_path: str):
 # --- Manifest ---
 @router.get("/manifest.json")
 async def stremio_manifest_default(request: Request):
-    return cors_response(build_manifest(get_base_url(request), None))
+    is_streamcube = "/streamcube" in str(request.url.path)
+    return cors_response(build_manifest(get_base_url(request), None, is_streamcube=is_streamcube))
 
 @router.get("/{token}/manifest.json")
 async def stremio_manifest_token(request: Request, token: str):
-    return cors_response(build_manifest(get_base_url(request), token))
+    is_streamcube = "/streamcube" in str(request.url.path)
+    return cors_response(build_manifest(get_base_url(request), token, is_streamcube=is_streamcube))
 
 
 # --- Catalog ---

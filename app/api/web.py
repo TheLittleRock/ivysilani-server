@@ -349,6 +349,8 @@ async def streamcube_page(request: Request):
     else:
         manifest_url = f"{base_url}/streamcube/manifest.json"
     streamcube_link = f"streamcube://addon/install?url={urllib.parse.quote(manifest_url, safe='')}"
+    m3u_url = f"{base_url}/get.php?token={user_token or 'active'}"
+    epg_url = f"{base_url}/xmltv.php?token={user_token or 'active'}"
 
     return templates.TemplateResponse(request=request, name="streamcube.html", context={
         "user": user,
@@ -356,6 +358,8 @@ async def streamcube_page(request: Request):
         "base_url": base_url,
         "manifest_url": manifest_url,
         "streamcube_link": streamcube_link,
+        "m3u_url": m3u_url,
+        "epg_url": epg_url,
         "active_tab": "streamcube"
     })
 
