@@ -3,6 +3,7 @@ import re
 import json
 import logging
 from datetime import datetime
+from collections import defaultdict
 from typing import Dict, List, Optional, Any, Tuple
 import httpx
 from bs4 import BeautifulSoup

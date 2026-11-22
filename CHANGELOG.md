@@ -6,6 +6,23 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.3.0] - 2026-11-22
+
+### Přidáno (Added)
+- **TMDb zarovnání a přeindexování sérií a epizod (TMDb Season & Episode Alignment):**
+  - Vyřešen zásadní problém, kdy ČT iVysílání eviduje mnohé dlouhé seriály (např. *Komisař Montalbano*, *13. komnata*, *Pan Tau*, *Dobrodružství kriminalistiky*, *Nemocnice na kraji města*) v jediné ploše 1. sérii, zatímco mezinárodní standard TMDb je člení do desítek sérií.
+  - V důsledku této neshody Crawler po stažení dílů S01 zahazoval všechny díly přesahující počet epizod 1. série v TMDb.
+  - V `app/services/tmdb_service.py` implementována metoda `get_tv_episodes` pro načtení kompletní struktury všech sérií a dílů z TMDb API.
+  - Implementováno chytré párování názvů `match_tokens` a normalizace `normalize_title` (zvládající českou flexi/skloňování, např. *Tereza Pergnerová* vs. *13. komnata Terezy Pergnerové*).
+  - Přidána metoda `align_show_episodes(show_id)` pro automatické přerozdělení epizod do správných sérií a dílů přímo v databázi.
+  - V `app/api/xtream.py` v endpointu `get_series_info` přidáno lazy/on-demand zarovnání: pokud je vyžádán seriál, který má v iVysílání všechny díly v 1. sérii, automaticky se na pozadí ověří a přeindexuje podle TMDb.
+  - Do administrace (`admin.html`, `web.py`) přidáno tlačítko a endpoint `POST /api/admin/reindex-tmdb` pro kompletní dávkové přeindexování všech seriálů v katalogu na pozadí.
+  - Vyřešeno hromadné odstranění 157 položek pořadu *13. komnata* z fronty stahování v crawleru (`queue.json`).
+- **Import oprav:**
+  - V `app/services/ct_service.py` doplněn chybějící import `defaultdict` z `collections`.
+
+---
+
 ## [2.2.3] - 2026-11-22
 
 ### Opraveno (Fixed)

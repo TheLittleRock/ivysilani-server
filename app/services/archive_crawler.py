@@ -421,6 +421,44 @@ class ArchiveCrawler:
         asyncio.create_task(self.enrich_all_shows_tmdb())
         return True
 
+    def start_background_tmdb_reindex(self) -> bool:
+        """Spustí TMDB přeindexování sérií a epizod na pozadí."""
+        asyncio.create_task(self.reindex_all_shows_tmdb())
+        return True
+
+    async def reindex_all_shows_tmdb(self):
+        """Obohatí a zarovná epizody všech seriálů podle TMDB na pozadí."""
+        from app.services.tmdb_service import tmdb_service
+        logger.info("Spouštím TMDB přeindexování epizod pro všechny seriály...")
+        with crud.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT s.id, s.title, s.tmdb_id, COUNT(e.id) as ep_count, MAX(e.season) as max_s
+                FROM shows s
+                JOIN episodes e ON s.id = e.show_id
+                WHERE s.show_type = 'series'
+                GROUP BY s.id
+                HAVING ep_count >= 2
+                ORDER BY ep_count DESC
+            """)
+            shows = [dict(r) for r in cursor.fetchall()]
+
+        aligned_count = 0
+        total = len(shows)
+        for idx, s in enumerate(shows, 1):
+            try:
+                if s.get("max_s", 1) <= 1:
+                    res = await tmdb_service.align_show_episodes(s["id"], s.get("tmdb_id"))
+                    if res.get("status") == "ok" and res.get("matched", 0) > 0:
+                        aligned_count += 1
+                        logger.info(f"[{idx}/{total}] Přeindexován seriál {s['title']}: {res['matched']}/{res['total']} dílů do sérií {res['seasons']}.")
+                await asyncio.sleep(0.2)
+            except Exception as e:
+                logger.warning(f"Chyba při přeindexování {s.get('id')}: {e}")
+
+        logger.info(f"TMDB přeindexování dokončeno: přeindexováno {aligned_count} seriálů.")
+        return aligned_count
+
     async def enrich_all_shows_tmdb(self):
         """Obohatí všechny pořady v databázi o TMDB metadata na pozadí."""
         from app.services.tmdb_service import tmdb_service

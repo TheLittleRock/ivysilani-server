@@ -433,6 +433,14 @@ async def admin_enrich_tmdb_api(request: Request):
     archive_crawler.start_background_tmdb_enrichment()
     return {"status": "ok", "message": "Obohacení katalogu z TMDB bylo spuštěno na pozadí."}
 
+@router.post("/api/admin/reindex-tmdb")
+async def admin_reindex_tmdb_api(request: Request):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Nedostatečná oprávnění")
+    archive_crawler.start_background_tmdb_reindex()
+    return {"status": "ok", "message": "Přeindexování sérií a epizod podle TMDB bylo spuštěno na pozadí."}
+
 @router.post("/admin/change-password")
 async def admin_change_password(
     request: Request,

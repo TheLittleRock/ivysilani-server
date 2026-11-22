@@ -3,7 +3,7 @@
 import subprocess
 from typing import Dict, Any
 
-__version__ = "2.2.3"
+__version__ = "2.3.0"
 __release_date__ = "2026-11-22"
 __app_name__ = "iVysílání Server"
 

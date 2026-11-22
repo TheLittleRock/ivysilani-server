@@ -482,6 +482,20 @@ async def player_api(
                 episodes = crud.get_episodes_by_show(s_id)
             playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
 
+            # Automatické dohledání a rozdělení do sérií podle TMDB (pokud má pořad v iVysílání jen 1 sérii)
+            existing_seasons = set(ep.get("season", 1) for ep in episodes)
+            if len(existing_seasons) <= 1 and len(playable_episodes) >= 4:
+                try:
+                    from app.services.tmdb_service import tmdb_service
+                    align_res = await tmdb_service.align_show_episodes(actual_id, show.get("tmdb_id"))
+                    if align_res.get("status") == "ok" and align_res.get("matched", 0) > 0:
+                        episodes = crud.get_episodes_by_show(actual_id)
+                        if not episodes and actual_id != s_id:
+                            episodes = crud.get_episodes_by_show(s_id)
+                        playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
+                except Exception as e:
+                    logger.debug(f"On-demand TMDB alignment skipped for {actual_id}: {e}")
+
             seasons_set = set()
             episodes_by_season = {}
             for ep in playable_episodes:

@@ -219,6 +219,17 @@
                 <span id="enrich-btn-text">Spustit TMDB obohacení</span>
             </button>
         </div>
+        <div class="pt-3 border-t border-slate-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div>
+                <h4 class="font-semibold text-slate-300">Přeindexování sérií a epizod (TMDB)</h4>
+                <p class="text-slate-400 text-[11px]">Rozdělí dlouhé nestrukturované seriály (např. Komisař Montalbano, 13. komnata, Pan Tau, Dobrodružství kriminalistiky) do správných sérií a čísel dílů dle TMDB.</p>
+            </div>
+            <button id="btn-reindex-tmdb" onclick="triggerTmdbReindex()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-800/50 text-xs font-semibold rounded-xl transition flex items-center space-x-2 shrink-0">
+                <i class="fa-solid fa-layer-group" id="reindex-spinner"></i>
+                <span id="reindex-btn-text">Přeindexovat série z TMDB</span>
+            </button>
+        </div>
+        <p id="reindex-status-msg" class="text-[11px] text-purple-400 hidden"></p>
         <p id="enrich-status-msg" class="text-[11px] text-cyan-400 hidden"></p>
     </div>
 
@@ -521,6 +532,32 @@
             spinner.classList.remove('fa-spin');
             btnText.textContent = 'Spustit TMDB obohacení';
             statusMsg.textContent = 'Chyba při spouštění synchronizace.';
+            statusMsg.className = 'text-[11px] text-red-400';
+        }
+    }
+
+    async function triggerTmdbReindex() {
+        const btn = document.getElementById('btn-reindex-tmdb');
+        const spinner = document.getElementById('reindex-spinner');
+        const btnText = document.getElementById('reindex-btn-text');
+        const statusMsg = document.getElementById('reindex-status-msg');
+
+        btn.disabled = true;
+        spinner.classList.add('fa-spin');
+        btnText.textContent = 'Přeindexovávám...';
+        statusMsg.classList.remove('hidden');
+        statusMsg.textContent = 'Zahajuji přeindexování sérií a epizod podle TMDB na pozadí...';
+
+        try {
+            const resp = await fetch('/api/admin/reindex-tmdb', { method: 'POST' });
+            const data = await resp.json();
+            statusMsg.textContent = data.message || 'Přeindexování běží na pozadí.';
+            btnText.textContent = 'Přeindexování běží';
+        } catch (e) {
+            btn.disabled = false;
+            spinner.classList.remove('fa-spin');
+            btnText.textContent = 'Přeindexovat série z TMDB';
+            statusMsg.textContent = 'Chyba při spouštění přeindexování.';
             statusMsg.className = 'text-[11px] text-red-400';
         }
     }

@@ -219,6 +219,12 @@ def upsert_episode(
             is_drm=excluded.is_drm
         """, (ep_id, show_id, idec, title, description, image_url, duration, season, episode_num, broadcast_date, 1 if is_playable else 0, 1 if is_drm else 0))
 
+def update_episode_season_and_number(ep_id: str, season: int, episode_num: int) -> bool:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE episodes SET season = ?, episode_num = ? WHERE id = ?", (int(season), int(episode_num), str(ep_id)))
+        return cursor.rowcount > 0
+
 def get_setting(key: str, default: str = "") -> str:
     with get_db() as conn:
         cursor = conn.cursor()

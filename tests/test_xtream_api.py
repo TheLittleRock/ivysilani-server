@@ -313,5 +313,40 @@ def test_series_episode_numbering_normalization():
     s2_nums = [e["episode_num"] for e in episodes["2"]]
     assert s2_nums == [1, 2]
 
+@pytest.mark.asyncio
+async def test_tmdb_episode_matching_and_alignment(monkeypatch):
+    from app.services.tmdb_service import tmdb_service
+
+    # Mock get_tv_episodes to return multi-season structure like Montalbano
+    async def mock_get_tv_episodes(tmdb_id):
+        return [
+            {"season": 1, "episode": 1, "name": "Zloděj školních svačin", "norm_name": tmdb_service.normalize_title("Zloděj školních svačin")},
+            {"season": 1, "episode": 2, "name": "Hlas houslí", "norm_name": tmdb_service.normalize_title("Hlas houslí")},
+            {"season": 2, "episode": 1, "name": "Tvar vody", "norm_name": tmdb_service.normalize_title("Tvar vody")},
+            {"season": 2, "episode": 2, "name": "Hliněný pes", "norm_name": tmdb_service.normalize_title("Hliněný pes")},
+        ]
+
+    monkeypatch.setattr(tmdb_service, "get_tv_episodes", mock_get_tv_episodes)
+
+    crud.upsert_show(show_id="montalbano_test", title="Komisař Montalbano", show_type="series", tmdb_id="37290")
+    # All episodes initially in season 1
+    crud.upsert_episode(ep_id="m1", show_id="montalbano_test", title="Tvar vody", idec="101", season=1, episode_num=1)
+    crud.upsert_episode(ep_id="m2", show_id="montalbano_test", title="Hliněný pes", idec="102", season=1, episode_num=2)
+    crud.upsert_episode(ep_id="m3", show_id="montalbano_test", title="Zloděj školních svačin", idec="103", season=1, episode_num=3)
+    crud.upsert_episode(ep_id="m4", show_id="montalbano_test", title="Hlas houslí", idec="104", season=1, episode_num=4)
+
+    res = await tmdb_service.align_show_episodes("montalbano_test", "37290")
+    assert res["status"] == "ok"
+    assert res["matched"] == 4
+
+    ep_tvar = crud.get_episode_by_id("m1")
+    assert ep_tvar["season"] == 2
+    assert ep_tvar["episode_num"] == 1
+
+    ep_zlodej = crud.get_episode_by_id("m3")
+    assert ep_zlodej["season"] == 1
+    assert ep_zlodej["episode_num"] == 1
+
+
 
 

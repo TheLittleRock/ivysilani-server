@@ -1,6 +1,7 @@
 import re
+import unicodedata
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set, Tuple
 import httpx
 from app.db import crud
 
@@ -188,5 +189,163 @@ class TMDBService:
             return tmdb_data
 
         return None
+
+    def normalize_title(self, text: str) -> str:
+        """Normalizuje název epizody pro spolehlivé porovnání (bez diakritiky, malá písmena, bez specifik seriálu)."""
+        if not text:
+            return ""
+        t = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("utf-8").lower()
+        t = re.sub(r"13\s*\.?\s*komnata", " ", t)
+        t = re.sub(r"komisar\s+montalbano", " ", t)
+        t = re.sub(r"pan\s+tau", " ", t)
+        t = re.sub(r"dobrodruzstvi\s+kriminalistiky", " ", t)
+        t = re.sub(r"nemocnice\s+na\s+kraji\s+mesta", " ", t)
+        t = re.sub(r"[^\w\s]", " ", t)
+        return " ".join(t.split())
+
+    def _match_tokens(self, s1: str, s2: str) -> bool:
+        """Ověří shodu kmenů slov pro českou flexi (např. 'Tereza Pergnerová' vs 'Terezy Pergnerové')."""
+        n1 = self.normalize_title(s1)
+        n2 = self.normalize_title(s2)
+        if not n1 or not n2:
+            return False
+        if n1 == n2 or n1 in n2 or n2 in n1:
+            return True
+        t1 = set(w[:4] for w in n1.split() if len(w) >= 3)
+        t2 = set(w[:4] for w in n2.split() if len(w) >= 3)
+        if not t1 or not t2:
+            return False
+        common = t1 & t2
+        return len(common) >= min(len(t1), len(t2)) and len(common) >= 1
+
+    async def get_tv_episodes(self, tmdb_id: str) -> List[Dict[str, Any]]:
+        api_key = self.get_api_key()
+        if not api_key or not tmdb_id:
+            return []
+
+        cache_key = f"tmdb_tv_episodes_{tmdb_id}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        episodes: List[Dict[str, Any]] = []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                r = await client.get(f"{self.BASE_URL}/tv/{tmdb_id}", params={"api_key": api_key, "language": "cs-CZ"})
+                if r.status_code != 200:
+                    return []
+                show_data = r.json()
+                seasons = show_data.get("seasons", [])
+                for s in seasons:
+                    s_num = s.get("season_number")
+                    if s_num == 0 and len(seasons) > 1:
+                        continue
+                    s_r = await client.get(
+                        f"{self.BASE_URL}/tv/{tmdb_id}/season/{s_num}",
+                        params={"api_key": api_key, "language": "cs-CZ"}
+                    )
+                    if s_r.status_code == 200:
+                        s_data = s_r.json()
+                        for ep in s_data.get("episodes", []):
+                            episodes.append({
+                                "season": s_num,
+                                "episode": ep.get("episode_number"),
+                                "name": ep.get("name") or "",
+                                "norm_name": self.normalize_title(ep.get("name") or ""),
+                                "air_date": ep.get("air_date") or "",
+                                "overview": ep.get("overview") or "",
+                                "still_path": ep.get("still_path") or ""
+                            })
+            self._cache[cache_key] = episodes
+            return episodes
+        except Exception as e:
+            logger.warning(f"Error fetching TMDb episodes for tv {tmdb_id}: {e}")
+            return []
+
+    async def align_show_episodes(self, show_id: str, tmdb_id: Optional[str] = None) -> Dict[str, Any]:
+        """Přeindexuje epizody seriálu podle TMDb sérií a čísel dílů."""
+        show = crud.get_show_by_id(show_id)
+        if not show:
+            return {"status": "error", "message": f"Show {show_id} not found", "matched": 0}
+
+        tid = tmdb_id or show.get("tmdb_id")
+        if not tid:
+            enrich = await self.enrich_show_metadata(show)
+            if enrich:
+                tid = enrich.get("tmdb_id")
+
+        if not tid:
+            return {"status": "no_tmdb", "message": f"No TMDb ID found for {show.get('title')}", "matched": 0}
+
+        tmdb_eps = await self.get_tv_episodes(tid)
+        if not tmdb_eps:
+            return {"status": "no_tmdb_episodes", "message": f"No episodes on TMDb for {tid}", "matched": 0}
+
+        tmdb_seasons = sorted(list(set(e["season"] for e in tmdb_eps)))
+        if len(tmdb_seasons) <= 1:
+            return {"status": "single_season_tmdb", "matched": 0}
+
+        local_eps = crud.get_episodes_by_show(show_id)
+        if not local_eps:
+            return {"status": "no_local_episodes", "matched": 0}
+
+        matched_count = 0
+        used_tmdb: Set[Tuple[int, int]] = set()
+
+        for ep in local_eps:
+            ep_title = ep.get("title", "")
+            norm_title = self.normalize_title(ep_title)
+            best_match = None
+
+            # a) Přesná shoda normalizovaného názvu
+            for tm in tmdb_eps:
+                key = (tm["season"], tm["episode"])
+                if key in used_tmdb:
+                    continue
+                if tm["norm_name"] and tm["norm_name"] == norm_title:
+                    best_match = tm
+                    break
+
+            # b) Token / stem match
+            if not best_match:
+                for tm in tmdb_eps:
+                    key = (tm["season"], tm["episode"])
+                    if key in used_tmdb:
+                        continue
+                    if self._match_tokens(ep_title, tm["name"]):
+                        best_match = tm
+                        break
+
+            if best_match:
+                key = (best_match["season"], best_match["episode"])
+                used_tmdb.add(key)
+                crud.update_episode_season_and_number(
+                    ep["id"],
+                    season=best_match["season"],
+                    episode_num=best_match["episode"]
+                )
+                matched_count += 1
+
+        # Fallback: Pokud se nespárovalo dostatečně dílů podle názvu, ale počty sedí
+        if matched_count < (len(local_eps) // 2) and abs(len(local_eps) - len(tmdb_eps)) <= 2:
+            local_sorted = sorted(local_eps, key=lambda x: (x.get("episode_num", 0), x.get("id", "")))
+            for idx, ep in enumerate(local_sorted):
+                if idx < len(tmdb_eps):
+                    tm = tmdb_eps[idx]
+                    crud.update_episode_season_and_number(
+                        ep["id"],
+                        season=tm["season"],
+                        episode_num=tm["episode"]
+                    )
+                    matched_count += 1
+
+        logger.info(f"Aligned show '{show.get('title')}' ({show_id}) with TMDb {tid}: {matched_count}/{len(local_eps)} episodes mapped across {len(tmdb_seasons)} seasons.")
+        return {
+            "status": "ok",
+            "show_id": show_id,
+            "tmdb_id": tid,
+            "matched": matched_count,
+            "total": len(local_eps),
+            "seasons": tmdb_seasons
+        }
 
 tmdb_service = TMDBService()

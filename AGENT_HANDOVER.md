@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.2.3` (definována v `app/version.py`)
+- **Verze projektu:** `2.3.0` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -124,6 +124,15 @@ flowchart TD
 4. **Číslování dílů v seriálech (Episode Numbering per Season):**
    - V ČT GraphQL API a Apollo state mohou být epizody více sérií vráceny v jednom poli, přičemž epizody bez číselného označení v názvu (např. *Čtyřlístek*) by při globálním číslování dostaly posunuté indexy (S01E04..S01E10, S02E11..S02E16).
    - V `app/services/ct_service.py` i `app/api/xtream.py` je implementován per-season čítač a normalizační pass, který garantuje, že v každé sérii začíná číslování dílů od 1 (`1..N`).
+5. **Zarovnání sérií a epizod podle TMDb (TMDb Alignment):**
+   - Mnoho seriálů na iVysílání nemá vytvořené série (např. *Komisař Montalbano*, *13. komnata*, *Pan Tau*, *Dobrodružství kriminalistiky*, *Nemocnice na kraji města*) a ČT je vrací jako jednu dlouhou sérii 1.
+   - TMDb je však člení do reálných televizních sérií (např. Montalbano 15 sérií, 13. komnata 16 sérií).
+   - `tmdb_service.align_show_episodes(show_id)` páruje epizody podle normalizovaných názvů a kmenů slov a přeindexuje `season` a `episode_num` přímo v SQLite tabulce `episodes`.
+   - V `get_series_info` probíhá on-demand ověření a zarovnání při prvním dotazu crawleru.
+   - V administraci je dostupné tlačítko a endpoint `/api/admin/reindex-tmdb` pro hromadné přeindexování celého katalogu na pozadí.
+6. **Správa fronty crawleru (`queue.json`):**
+   - Fronta crawleru se nachází v kontejneru `crawler` na cestě `/home/ubuntu/.local/state/xtream-gui/queue.json`.
+   - Lze z ní hromadně smazat položky libovolného pořadu filtrem přes Python/JSON bez nutnosti proklikávat GUI.
 
 ---
 
