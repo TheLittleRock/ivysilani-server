@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.2.0` (definována v `app/version.py`)
+- **Verze projektu:** `2.2.1` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -100,6 +100,16 @@ flowchart TD
 - Z toho důvodu byly titulky zobrazeny o cca 2 sekundy dříve, než herec promluvil.
 - Endpoint `/api/subtitles` má parametr `offset` (výchozí hodnota `settings.SUBTITLE_OFFSET_SECONDS = 1.8`, upravitelná v `/admin#subtitles-settings` přes tabulku `app_settings`), který přes funkci `shift_vtt_timestamps()` automaticky posouvá všechny časové značky o +1.8s dopředu v čase, čímž zajišťuje dokonalou synchronizaci zvuku a textu bez zpoždění.
 - Pro HLS přehrávače (VLC, TiviMate, ExoPlayer) server automaticky injektuje hlavičku `X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0`.
+
+### F. Stahování WebVTT titulků v Crawleru / xtream-gui (`app/api/stream.py`)
+- Go stahovač (`xtream-gui-linux` v kontejneru `crawler`) ve svém balíčku `internal/download` implementuje dvě větve pro titulky:
+  1. **Direct VTT (`isDirectVTT(uri)`):** Pokud URI titulků v tagu `#EXT-X-MEDIA:TYPE=SUBTITLES` končí přímo příponou `.vtt` (ověřuje se přes `filepath.Ext(url.Path)`), stahovač stáhne soubor přímo jako `single.vtt` a bez jakéhokoliv dalšího parsování či spojování jej předá do `ffmpeg -i video.bin -i zvuk_0.bin -i single.vtt -c copy -c:s mov_text ...`.
+  2. **Segmented HLS VTT (`collapseM3U8ToVTTSerial` / `joinVTTFromFiles`):** Pokud URI končí na `.m3u8`, stáhne playlist a kontroluje příponu segmentů přes `playlistLooksLikeSegmentedVTT`. Pokud segment nemá příponu `.vtt` (např. `/api/subtitles?url=...`), vyhodnotí `looksVTT = false`, segmenty zahodí a při pokusu o spojení zahlásí `1 titulkových stop se nepodařilo spojit, do filmu se nedostaly` a stahování skončí s varováním: `výhrady: zdroj nabízel titulky, v souboru žádné nejsou`.
+- **Implementované řešení:**
+  - Vytvořen endpoint `/api/subtitles/{idec}.vtt`, který stahuje a posouvá titulky pro daný pořad.
+  - V `get_hls_subtitle_playlist` (`/api/hls/subtitles/{idec}.m3u8`) segment odkazuje přímo na `/api/subtitles/{idec}.vtt`.
+  - V `get_hls_master_playlist` (`/api/hls/master/{idec}.m3u8`) pro požadavky s parametrem `xtream=1` nebo s User-Agentem obsahujícím `xtream` či `crawler` server vrací v `#EXT-X-MEDIA:TYPE=SUBTITLES` přímo URI `/api/subtitles/{idec}.vtt`.
+  - Pro standardní přehrávače (VLC, TiviMate, ExoPlayer) server zachovává standardní HLS playlist `/api/hls/subtitles/{idec}.m3u8`.
 
 ---
 

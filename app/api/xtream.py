@@ -808,9 +808,9 @@ async def vod_stream(
     forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
     base_url = f"{forwarded_proto}://{forwarded_host}"
 
-    master_url = f"{base_url}/api/hls/master/{idec}.m3u8"
+    master_url = f"{base_url}/api/hls/master/{idec}.m3u8?xtream=1"
     if quality:
-        master_url += f"?quality={quality}"
+        master_url += f"&quality={quality}"
     return RedirectResponse(url=master_url, status_code=302)
 
 # --- M3U Playlist & EPG Export ---

@@ -101,6 +101,22 @@ async def proxy_subtitles(url: str = Query(...), offset: Optional[float] = Query
         logger.error(f"Error proxying subtitles from {url}: {e}")
         raise HTTPException(status_code=502, detail="Subtitle proxy error")
 
+@router.api_route("/subtitles/{idec}.vtt", methods=["GET", "HEAD"])
+async def get_vtt_subtitles_by_idec(request: Request, idec: str, offset: Optional[float] = Query(None)):
+    """Poskytuje WebVTT titulky přímo podle IDEC epizody/filmu.
+    Umožňuje přímé stažení titulků v crawleru (xtream-gui) i přehrávačích bez potřeby M3U8 obálky.
+    """
+    data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
+    if not data or not data.get("subtitles"):
+        raise HTTPException(status_code=404, detail="Subtitles not available")
+    vtt_url = data["subtitles"][0]["url"]
+    return await proxy_subtitles(url=vtt_url, offset=offset)
+
+@router.api_route("/subtitles/track.vtt", methods=["GET", "HEAD"])
+async def proxy_subtitles_vtt(url: str = Query(...), offset: Optional[float] = Query(None)):
+    """Proxy WebVTT titulků s URL končící na .vtt pro kompatibilitu s HLS segmenty."""
+    return await proxy_subtitles(url=url, offset=offset)
+
 @router.api_route("/image-proxy", methods=["GET", "HEAD"])
 async def get_image_proxy(url: str, pad: Optional[str] = Query(None)):
     content, media_type = await image_proxy.fetch_image(url, pad=pad)
@@ -139,7 +155,8 @@ async def get_live_stream_info(request: Request, channel_id: str):
 async def get_hls_master_playlist(
     request: Request,
     idec: str,
-    quality: Optional[str] = Query(None)
+    quality: Optional[str] = Query(None),
+    xtream: Optional[int] = Query(None)
 ):
     """Dynamicky přepíše HLS master playlist: vloží české titulky a volitelně vyfiltruje požadovanou kvalitu."""
     data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
@@ -161,7 +178,18 @@ async def get_hls_master_playlist(
             has_subtitles = bool(data.get("subtitles"))
             lines = master_text.splitlines()
             has_existing_subs = any(l.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES") for l in lines)
-            sub_line = f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Čeština",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="cs",URI="{base_url}/api/hls/subtitles/{idec}.m3u8"'
+
+            # Detekce klienta: pro xtream / crawler nabízíme přímý VTT odkaz (isDirectVTT),
+            # protože crawler stahuje titulky přímo jako single.vtt a muxuje je do výsledného MP4
+            user_agent = request.headers.get("user-agent", "").lower()
+            is_crawler = bool(xtream) or "xtream" in user_agent or "crawler" in user_agent
+
+            if is_crawler:
+                sub_uri = f"{base_url}/api/subtitles/{idec}.vtt"
+            else:
+                sub_uri = f"{base_url}/api/hls/subtitles/{idec}.m3u8"
+
+            sub_line = f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Čeština",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="cs",URI="{sub_uri}"'
 
             out_lines = []
             sub_injected = False
@@ -239,7 +267,7 @@ async def get_hls_subtitle_playlist(request: Request, idec: str):
     forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
     base_url = f"{forwarded_proto}://{forwarded_host}"
-    proxy_sub_url = f"{base_url}/api/subtitles?url={urllib.parse.quote(vtt_url, safe='')}"
+    proxy_sub_url = f"{base_url}/api/subtitles/{idec}.vtt"
 
     hls_vtt = f"""#EXTM3U
 #EXT-X-TARGETDURATION:7200

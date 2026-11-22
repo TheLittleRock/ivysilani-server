@@ -106,3 +106,49 @@ def test_shift_vtt_timestamps():
     sample_early = "00:00:02.000 --> 00:00:06.000"
     shifted_early = shift_vtt_timestamps(sample_early, -5.0)
     assert "00:00:00.000 --> 00:00:01.000" in shifted_early
+
+@pytest.mark.asyncio
+async def test_direct_vtt_and_hls_subtitle_routes(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.services.ct_service import ct_service
+
+    async def mock_resolve_vod(idec, allow_drm=False):
+        return {
+            "hls_url": "https://ivys-cdn.cz/master.m3u8",
+            "subtitles": [
+                {"language": "ces", "label": "Čeština", "url": "https://ctfs.cz/test.vtt"}
+            ]
+        }
+
+    monkeypatch.setattr(ct_service, "resolve_vod_stream", mock_resolve_vod)
+
+    client = TestClient(app)
+
+    # 1. HLS WebVTT subtitle playlist musí obsahovat segment končící na .vtt
+    resp_sub = client.get("/api/hls/subtitles/12345.m3u8")
+    assert resp_sub.status_code == 200
+    assert "/api/subtitles/12345.vtt" in resp_sub.text
+
+    # 2. Master playlist s xtream=1 nebo crawler UA musí nabízet přímý .vtt odkaz v #EXT-X-MEDIA
+    import unittest.mock as mock
+    with mock.patch("httpx.AsyncClient.get") as mock_get:
+        mock_resp = mock.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5000000\nstream.m3u8"
+        mock_get.return_value = mock_resp
+
+        # a) Požadavek s xtream=1
+        resp_crawler = client.get("/api/hls/master/12345.m3u8?xtream=1")
+        assert resp_crawler.status_code == 200
+        assert 'URI="http://testserver/api/subtitles/12345.vtt"' in resp_crawler.text
+
+        # b) Požadavek s User-Agentem xtream-gui
+        resp_ua = client.get("/api/hls/master/12345.m3u8", headers={"User-Agent": "Mozilla/5.0 (compatible; xtream-gui/1.0)"})
+        assert resp_ua.status_code == 200
+        assert 'URI="http://testserver/api/subtitles/12345.vtt"' in resp_ua.text
+
+        # c) Běžný přehrávač (např. TiviMate/VLC) bez xtream dostává .m3u8 playlist
+        resp_player = client.get("/api/hls/master/12345.m3u8", headers={"User-Agent": "TiviMate/4.7.0"})
+        assert resp_player.status_code == 200
+        assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_player.text

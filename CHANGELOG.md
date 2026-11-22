@@ -6,6 +6,21 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.2.1] - 2026-11-22
+
+### Opraveno (Fixed)
+- **Titulky při stahování v Crawleru (Direct WebVTT & HLS Segment VTT Fix):**
+  - Vyřešena chyba stahovače (`xtream-gui-linux`): `výhrady: zdroj nabízel titulky, v souboru žádné nejsou` (`[mux] 1 titulkových stop se nepodařilo spojit, do filmu se nedostaly`).
+  - **Příčina:** Crawler ve svém interním stahovacím engine (`internal/download`) provádí kontrolu přípon segmentů pomocí `playlistLooksLikeSegmentedVTT` a `isDirectVTT`. Dosavadní segmentový odkaz v M3U8 byl `/api/subtitles?url=...` (bez přípony v cestě URL), což vedlo k detekci `looksVTT = false` a vyprázdnění seznamu segmentů k fúzi.
+  - **Řešení:**
+    1. Vytvořen dedikovaný endpoint `/api/subtitles/{idec}.vtt`, který přímo stahuje, zpožďuje (+1.8s) a vrací WebVTT titulky pro daný pořad s korektní příponou `.vtt`.
+    2. V HLS WebVTT playlistu `/api/hls/subtitles/{idec}.m3u8` nyní segment odkazuje na `/api/subtitles/{idec}.vtt`.
+    3. Pro klienty typu Crawler (`xtream-tui`, `xtream-gui` nebo dotazy přes parametr `xtream=1`) vkládá master playlist do tagu `#EXT-X-MEDIA:TYPE=SUBTITLES` přímý odkaz `URI="/api/subtitles/{idec}.vtt"`, což v crawleru aktivuje nativní větev `isDirectVTT` (přímé stažení `single.vtt` bez jakéhokoliv selhání spojování a bez nutnosti serializace).
+    4. Běžné přehrávače (VLC, TiviMate, ExoPlayer) nadále dostávají standardní HLS Media Playlist `/api/hls/subtitles/{idec}.m3u8`.
+    5. Titulky se nyní při stahování bezchybně vkládají do MP4 kontejneru (`Stream #0:2: Subtitle: mov_text`).
+
+---
+
 ## [2.2.0] - 2026-11-22
 
 ### Opraveno (Fixed)
