@@ -171,77 +171,76 @@ async def get_hls_master_playlist(
                 return RedirectResponse(url=hls_master_url, status_code=302)
 
             master_text = resp.text
-            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-            forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
-            base_url = f"{forwarded_proto}://{forwarded_host}"
+            base_url = settings.BASE_URL.rstrip('/') if settings.BASE_URL else None
+            if not base_url:
+                forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+                forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+                base_url = f"{forwarded_proto}://{forwarded_host}"
 
             has_subtitles = bool(data.get("subtitles"))
-            lines = master_text.splitlines()
-            has_existing_subs = any(l.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES") for l in lines)
-
-            # Detekce klienta: pro xtream / crawler nabízíme přímý VTT odkaz (isDirectVTT),
-            # protože crawler stahuje titulky přímo jako single.vtt a muxuje je do výsledného MP4
-            user_agent = request.headers.get("user-agent", "").lower()
-            is_crawler = bool(xtream) or "xtream" in user_agent or "crawler" in user_agent
-
-            if is_crawler:
-                sub_uri = f"{base_url}/api/subtitles/{idec}.vtt"
-            else:
-                sub_uri = f"{base_url}/api/hls/subtitles/{idec}.m3u8"
-
+            sub_uri = f"{base_url}/api/hls/subtitles/{idec}.m3u8"
             sub_line = f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Čeština",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="cs",URI="{sub_uri}"'
 
-            out_lines = []
-            sub_injected = False
-            skip_next_stream = False
+            lines = [l.strip() for l in master_text.splitlines() if l.strip()]
+            headers = []
+            audios = []
+            subtitles = []
+            variants = []
 
-            for line in lines:
-                if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO") or line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
-                    out_lines.append(line)
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                if line.startswith("#EXTM3U") or line.startswith("#EXT-X-VERSION"):
+                    headers.append(line)
+                    i += 1
+                elif line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+                    audios.append(line)
+                    i += 1
+                elif line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
+                    subtitles.append(line)
+                    i += 1
                 elif line.startswith("#EXT-X-STREAM-INF:"):
-                    # Pokud ČT nemá v master playlistu žádné titulky, ale my máme externí WebVTT, vložíme je před první variantu
-                    if has_subtitles and not has_existing_subs and not sub_injected:
-                        out_lines.append(sub_line)
-                        sub_injected = True
-
-                    bw_match = re.search(r"BANDWIDTH=(\d+)", line)
+                    inf_line = line
+                    uri_line = lines[i+1] if i + 1 < len(lines) else ""
+                    i += 2
+                    bw_match = re.search(r"BANDWIDTH=(\d+)", inf_line)
                     bw = int(bw_match.group(1)) if bw_match else 0
-                    keep = True
-                    if quality == "1080p" and bw < 5000000:
-                        keep = False
-                    elif quality == "720p" and not (2500000 <= bw <= 4500000):
-                        keep = False
-                    elif quality == "576p" and not (1500000 <= bw <= 2500000):
-                        keep = False
-
-                    if keep:
-                        if has_subtitles and not has_existing_subs and 'SUBTITLES=' not in line:
-                            line += ',SUBTITLES="subs"'
-                        out_lines.append(line)
-                        skip_next_stream = False
-                    else:
-                        skip_next_stream = True
-                elif skip_next_stream:
-                    skip_next_stream = False
+                    variants.append((inf_line, uri_line, bw))
                 else:
-                    out_lines.append(line)
+                    i += 1
 
-            # Fallback pokud filtr kvality nic nezanechal
-            if not any(l.startswith("#EXT-X-STREAM-INF:") for l in out_lines):
-                out_lines = []
-                sub_injected = False
-                for line in lines:
-                    if line.startswith("#EXT-X-MEDIA:TYPE=AUDIO") or line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
-                        out_lines.append(line)
-                    elif line.startswith("#EXT-X-STREAM-INF:"):
-                        if has_subtitles and not has_existing_subs and not sub_injected:
-                            out_lines.append(sub_line)
-                            sub_injected = True
-                        if has_subtitles and not has_existing_subs and 'SUBTITLES=' not in line:
-                            line += ',SUBTITLES="subs"'
-                        out_lines.append(line)
-                    else:
-                        out_lines.append(line)
+            # Injekce českých titulků pokud v master playlistu chybí
+            if has_subtitles and not subtitles:
+                subtitles.append(sub_line)
+
+            # Volitelná filtrace podle kvality
+            selected_variants = []
+            for inf_line, uri_line, bw in variants:
+                keep = True
+                if quality == "1080p" and bw < 5000000:
+                    keep = False
+                elif quality == "720p" and not (2500000 <= bw <= 4500000):
+                    keep = False
+                elif quality == "576p" and not (1500000 <= bw <= 2500000):
+                    keep = False
+
+                if keep:
+                    selected_variants.append((inf_line, uri_line, bw))
+
+            if not selected_variants:
+                selected_variants = variants
+
+            # Sestavení čistého master playlistu podle RFC 8216
+            out_lines = []
+            out_lines.extend(headers)
+            out_lines.extend(audios)
+            out_lines.extend(subtitles)
+
+            for inf_line, uri_line, _ in selected_variants:
+                if (has_subtitles or subtitles) and 'SUBTITLES=' not in inf_line:
+                    inf_line += ',SUBTITLES="subs"'
+                out_lines.append(inf_line)
+                out_lines.append(uri_line)
 
             return Response(
                 content="\n".join(out_lines),
@@ -258,15 +257,16 @@ async def get_hls_master_playlist(
 
 @router.api_route("/hls/subtitles/{idec}.m3u8", methods=["GET", "HEAD"])
 async def get_hls_subtitle_playlist(request: Request, idec: str):
-    """Vrátí HLS WebVTT subtitle playlist pro IPTV přehrávače (TiviMate/VLC)."""
+    """Vrátí HLS WebVTT subtitle playlist pro IPTV přehrávače (TiviMate/VLC) a crawler."""
     data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
     if not data or not data.get("subtitles"):
         raise HTTPException(status_code=404, detail="Subtitles not available")
 
-    vtt_url = data["subtitles"][0]["url"]
-    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
-    base_url = f"{forwarded_proto}://{forwarded_host}"
+    base_url = settings.BASE_URL.rstrip('/') if settings.BASE_URL else None
+    if not base_url:
+        forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+        base_url = f"{forwarded_proto}://{forwarded_host}"
     proxy_sub_url = f"{base_url}/api/subtitles/{idec}.vtt"
 
     hls_vtt = f"""#EXTM3U

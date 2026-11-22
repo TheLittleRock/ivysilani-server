@@ -1,8 +1,9 @@
+import time
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -66,6 +67,22 @@ app.add_middleware(
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    user_agent = request.headers.get("user-agent", "-")
+    client_ip = request.client.host if request.client else "-"
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    start_time = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start_time) * 1000
+
+    if not request.url.path.startswith("/static"):
+        logger.info(f'{client_ip} - "{request.method} {request.url.path}" {response.status_code} ({duration_ms:.1f}ms) UA: {user_agent[:60]}')
+    return response
 
 # Statické soubory
 STATIC_DIR = Path(__file__).parent / "static"

@@ -6,6 +6,23 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.2.2] - 2026-11-22
+
+### Opraveno (Fixed)
+- **Kompletní oprava stahování titulků v Crawleru (RFC 8216 HLS Master Playlist & Subtitle M3U8):**
+  - Vyřešena chyba stahovače (`xtream-gui-linux`): `výhrady: zdroj nabízel titulky, v souboru žádné nejsou` (`[mux] skládám slepené stopy: 1 obraz, 1 zvuk, 0 titulky`).
+  - **Příčina:**
+    1. Hlubokým reverzním inženýrstvím Go binárky `xtream-gui-linux` (symboly `runHLSFallbackSmart`, `isDirectVTT`, `parseMaster`) bylo zjištěno, že pokud `#EXT-X-MEDIA:TYPE=SUBTITLES` obsahuje přímou URL končící na `.vtt`, funkce `isDirectVTT` vrátí `true`, což způsobí okamžitý skok přes prefetch smyčku a vynechání registrace stopy pro finální muxování.
+    2. Crawler vyžaduje HLS subtitle playlist (`.m3u8`), uvnitř kterého segment končí na `.vtt` (ověřeno funkcí `playlistLooksLikeSegmentedVTT`).
+    3. Původní master playlist měl prokládané tagy `#EXT-X-MEDIA:TYPE=AUDIO` a `#EXT-X-STREAM-INF:`. Go parser v `parseMaster` zahazuje variantu, pokud za `#EXT-X-STREAM-INF:` bezprostředně nenásleduje video URL, ale další `#EXT-X-MEDIA` tag.
+  - **Řešení:**
+    1. V `app/api/stream.py` upraven `get_hls_master_playlist`: podle RFC 8216 jsou nyní na začátku master playlistu seřazeny všechny audio a titulkové `#EXT-X-MEDIA` tagy, následované jednotlivými `#EXT-X-STREAM-INF:` tagy (každý s atributem `SUBTITLES="subs"` a bezprostředně následující video URL).
+    2. Tag titulků `#EXT-X-MEDIA:TYPE=SUBTITLES` v master playlistu vždy odkazuje na `/api/hls/subtitles/{idec}.m3u8`.
+    3. HLS subtitle playlist `/api/hls/subtitles/{idec}.m3u8` poskytuje segment `/api/subtitles/{idec}.vtt`, což v crawleru aktivuje detekci `playlistLooksLikeSegmentedVTT`, stažení segmentu `0.vtt`, spojení do `joined.vtt` a korektní muxování do výsledného MP4 (`Stream #0:2: Subtitle: mov_text`).
+    4. Přidán HTTP access log middleware v `app/main.py` pro okamžitou diagnostiku a přehled všech požadavků z crawleru a klientů.
+
+---
+
 ## [2.2.1] - 2026-11-22
 
 ### Opraveno (Fixed)
