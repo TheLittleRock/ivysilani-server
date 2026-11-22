@@ -97,10 +97,10 @@ def test_shift_vtt_timestamps():
         "01:59:58.500 --> 02:00:01.000\n"
         "Druhý řádek přes hranici hodiny\n"
     )
-    # Default shift +2.5 seconds
-    shifted = shift_vtt_timestamps(sample_vtt, 2.5)
-    assert "00:00:12.500 --> 00:00:18.000" in shifted
-    assert "02:00:01.000 --> 02:00:03.500" in shifted
+    # Default shift +1.8 seconds
+    shifted = shift_vtt_timestamps(sample_vtt, 1.8)
+    assert "00:00:11.800 --> 00:00:17.300" in shifted
+    assert "02:00:00.300 --> 02:00:02.800" in shifted
 
     # Negative offset (e.g. -5s) with floor at 0
     sample_early = "00:00:02.000 --> 00:00:06.000"

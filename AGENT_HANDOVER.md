@@ -92,12 +92,13 @@ flowchart TD
 ### D. Kompatibilita s Go klienty / Crawler (`app/api/xtream.py`)
 - Go unmarshaler v `xtream-gui-linux` striktně vyžaduje `stream_id` a `series_id` jako celá čísla (`int`), nikoliv textové řetězce.
 - Funkce `to_int_id()` garantuje, že všechny VOD a seriálové položky posílají celočíselná ID.
+- **Season struktura v `get_series_info`:** Každá epizoda uvnitř `episodes[season_key]` i její podobjekt `info` MUSÍ obsahovat pole `"season": s_num` (typu `int`), `"season_num": s_num` a `"season_number": s_num`. Pokud toto pole chybí, Go struct unmarshaler v crawleru ponechá `ep.Season = 0` a vytvoří název souboru s chybným `S00` (např. `Show.S00E01.mp4`).
 - Server používá `GZipMiddleware`, čímž zmenšuje velikost katalogu z 570 KB na ~45 KB a předchází 502 chybám z důvodu přetečení proxy bufferu.
 
 ### E. Synchronizace WebVTT titulků (`app/api/stream.py`)
-- WebVTT soubory z CDN České televize začínají časovou osu od `00:00:00.000`, zatímco VOD HLS TS segmenty mají video leader / pre-roll (první PTS ~183600 ticks = ~2.04s - 2.5s).
-- Z toho důvodu byly titulky zobrazeny o 2 až 3 sekundy dříve, než herec promluvil.
-- Endpoint `/api/subtitles` má parametr `offset` (výchozí hodnota `settings.SUBTITLE_OFFSET_SECONDS = 2.5`), který přes funkci `shift_vtt_timestamps()` automaticky posouvá všechny časové značky o +2.5s dopředu v čase, čímž zajišťuje dokonalou synchronizaci zvuku a textu ve všech přehrávačích.
+- WebVTT soubory z CDN České televize začínají časovou osu od `00:00:00.000`, zatímco VOD HLS TS segmenty mají video leader / pre-roll (první PTS ~183600 ticks = ~2.04s).
+- Z toho důvodu byly titulky zobrazeny o cca 2 sekundy dříve, než herec promluvil.
+- Endpoint `/api/subtitles` má parametr `offset` (výchozí hodnota `settings.SUBTITLE_OFFSET_SECONDS = 1.8`, upravitelná v `/admin#subtitles-settings` přes tabulku `app_settings`), který přes funkci `shift_vtt_timestamps()` automaticky posouvá všechny časové značky o +1.8s dopředu v čase, čímž zajišťuje dokonalou synchronizaci zvuku a textu bez zpoždění.
 - Pro HLS přehrávače (VLC, TiviMate, ExoPlayer) server automaticky injektuje hlavičku `X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0`.
 
 ---

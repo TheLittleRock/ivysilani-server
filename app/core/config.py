@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     # Interval indexace katalogu archivu v hodinách
     CRAWL_INTERVAL_HOURS: int = 24
     
-    # Výchozí časový posun titulků v sekundách (zpoždění titulků vůči videu, ČT WebVTT mívá náskok ~2.5s)
-    SUBTITLE_OFFSET_SECONDS: float = 2.5
+    # Výchozí časový posun titulků v sekundách (zpoždění titulků vůči videu, ČT WebVTT mívá náskok ~1.8s)
+    SUBTITLE_OFFSET_SECONDS: float = 1.8
 
     # User Agent pro ČT API
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"

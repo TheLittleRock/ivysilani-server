@@ -9,9 +9,13 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 ## [2.2.0] - 2026-11-22
 
 ### Opraveno (Fixed)
-- **Synchronizace titulků (+2.5s Audio/Video Sync):**
-  - Vyřešen problém, kdy byly české WebVTT titulky u pořadů o 2–3 sekundy napřed oproti mluvenému slovu (dáno leader offsetem ve videu ČT).
-  - Implementována funkce `shift_vtt_timestamps()` s výchozím posunem `SUBTITLE_OFFSET_SECONDS = 2.5` na proxy endpointu `/api/subtitles`.
+- **Xtream Series Season Reporting (Oprava Season 0 u seriálů v Crawleru):**
+  - Vyřešena chyba, kdy stahovač (Crawler / `xtream-gui-linux`) ukládal všechny epizody seriálů jako `S00` (např. `Čtyřlístek.S00E11.mp4`).
+  - V odpovědi akce `get_series_info` v `player_api.php` chybělo v objektu každé epizody i ve vnořeném `info` pole `season`, což v Go unmarshaleru ponechávalo celočíselnou proměnnou `ep.Season` na výchozí nule.
+  - Doplněna explicitní pole `season`, `season_num` a `season_number` (jako `int`) přímo do každé epizody i do objektu `info`, včetně správného číslování speciálů (`season = 0`).
+- **Jemné doladění synchronizace titulků (+1.8s Audio/Video Sync):**
+  - Posun WebVTT titulků byl zkalibrován z `2.5s` na `1.8s`, čímž bylo odstraněno drobné zpoždění (zlomek sekundy za mluveným slovem). Titulky se nyní zobrazují přesně ve chvíli, kdy postava promluví.
+  - Přidána možnost dynamické konfigurace posunu titulků přes databázi `app_settings` (`subtitle_offset_seconds`) a nové administrační rozhraní (`/admin#subtitles-settings`).
 - **Oprava rozpadlého horního navigačního panelu:**
   - Upraven layout a zkráceny popisky navigačních položek (přidáno `whitespace-nowrap shrink-0` a přepnutí responzivního breakpointu na `lg:`). Tlačítka se již nezalamují do dvou řádků ani na menších monitorech a noteboocích (1024–1366 px).
 - **Moderní tmavé scrollbary pro celou aplikaci:**

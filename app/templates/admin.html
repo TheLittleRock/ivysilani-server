@@ -222,6 +222,33 @@
         <p id="enrich-status-msg" class="text-[11px] text-cyan-400 hidden"></p>
     </div>
 
+    <!-- Synchronizace WebVTT titulků -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="subtitles-settings">
+        <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-base shrink-0">
+                <i class="fa-solid fa-closed-captioning"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-white">Synchronizace WebVTT titulků</h3>
+                <p class="text-xs text-slate-400">Automatické vyrovnání časového rozdílu mezi WebVTT titulky a MPEGTS/HLS videem z ČT.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="/admin/settings/subtitles" class="space-y-3 pt-1 text-xs">
+            <div>
+                <label class="block text-slate-400 mb-1">Časový posun titulků (sekundy, výchozí 1.8s):</label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="number" step="0.1" name="subtitle_offset_seconds" value="{{ subtitle_offset_seconds }}" required
+                           class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-mono text-xs focus:outline-none focus:border-indigo-500" />
+                    <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow shrink-0">
+                        Uložit posun titulků
+                    </button>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-1.5">Kladná hodnota zpožďuje zobrazení titulků (např. 1.8s pro perfektní synchronizaci s audiem ČT).</p>
+            </div>
+        </form>
+    </div>
+
     <!-- 4. Správa uživatelů -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

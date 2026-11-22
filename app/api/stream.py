@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, Response, Query
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 import httpx
+from app.db import crud
 from app.services.ct_service import ct_service
 from app.services.drm_proxy import drm_session_manager
 from app.services.image_proxy import image_proxy
@@ -15,7 +16,7 @@ logger = logging.getLogger("stream_api")
 
 router = APIRouter(prefix="/api")
 
-def shift_vtt_timestamps(vtt_text: str, offset_seconds: float = 2.5) -> str:
+def shift_vtt_timestamps(vtt_text: str, offset_seconds: float = 1.8) -> str:
     """Posune všechny časové značky ve WebVTT o zadaný počet sekund.
     Kladná hodnota posouvá titulky dopředu v čase (zpožďuje jejich zobrazení,
     pokud se zobrazují moc brzy).
@@ -64,8 +65,19 @@ async def proxy_subtitles(url: str = Query(...), offset: Optional[float] = Query
             
             vtt_text = resp.text
 
-            # Časový posun titulků: ČT WebVTT soubory mívají náskok 2-3s vůči webovému VOD videu
-            use_offset = offset if offset is not None else settings.SUBTITLE_OFFSET_SECONDS
+            # Časový posun titulků: ČT WebVTT soubory mívají náskok vůči webovému VOD videu
+            if offset is not None:
+                use_offset = offset
+            else:
+                db_offset = crud.get_setting("subtitle_offset_seconds", "")
+                if db_offset:
+                    try:
+                        use_offset = float(db_offset)
+                    except ValueError:
+                        use_offset = settings.SUBTITLE_OFFSET_SECONDS
+                else:
+                    use_offset = settings.SUBTITLE_OFFSET_SECONDS
+
             if use_offset != 0:
                 vtt_text = shift_vtt_timestamps(vtt_text, use_offset)
 

@@ -379,6 +379,7 @@ async def admin_page(
     crawler_stats = archive_crawler.stats
     total_shows = crud.count_shows()
     tmdb_key = crud.get_setting("tmdb_api_key", "2f453df93e1dd76ca1e176029a0f9baf")
+    subtitle_offset = crud.get_setting("subtitle_offset_seconds", str(settings.SUBTITLE_OFFSET_SECONDS))
     raw_crawl_info = crud.get_setting("last_crawl_info", "")
     last_crawl_info = None
     if raw_crawl_info:
@@ -397,6 +398,7 @@ async def admin_page(
         "crawler_stats": crawler_stats,
         "last_crawl_info": last_crawl_info,
         "tmdb_api_key": tmdb_key,
+        "subtitle_offset_seconds": subtitle_offset,
         "total_shows": total_shows,
         "error": error,
         "success": success,
@@ -410,6 +412,18 @@ async def admin_save_tmdb_settings(request: Request, tmdb_api_key: str = Form(..
         return RedirectResponse(url="/login", status_code=303)
     crud.set_setting("tmdb_api_key", tmdb_api_key.strip())
     return RedirectResponse(url="/admin?success=TMDB+API+klíč+byl+úspěšně+uložen#tmdb-settings", status_code=303)
+
+@router.post("/admin/settings/subtitles")
+async def admin_save_subtitles_settings(request: Request, subtitle_offset_seconds: str = Form(...)):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse(url="/login", status_code=303)
+    try:
+        val = float(subtitle_offset_seconds.replace(",", ".").strip())
+        crud.set_setting("subtitle_offset_seconds", str(val))
+        return RedirectResponse(url=f"/admin?success=Posun+titulků+byl+nastaven+na+{val}s#subtitles-settings", status_code=303)
+    except ValueError:
+        return RedirectResponse(url="/admin?error=Neplatná+hodnota+posunu+titulků#subtitles-settings", status_code=303)
 
 @router.post("/api/admin/enrich-tmdb")
 async def admin_enrich_tmdb_api(request: Request):

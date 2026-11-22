@@ -479,7 +479,24 @@ async def player_api(
             seasons_set = set()
             episodes_by_season = {}
             for ep in playable_episodes:
-                s_num = ep.get("season", 1) or 1
+                raw_sn = ep.get("season")
+                if raw_sn is not None:
+                    try:
+                        s_num = int(raw_sn)
+                    except (ValueError, TypeError):
+                        s_num = 1
+                else:
+                    s_num = 1
+
+                raw_ep_num = ep.get("episode_num")
+                if raw_ep_num is not None:
+                    try:
+                        ep_num = int(raw_ep_num)
+                    except (ValueError, TypeError):
+                        ep_num = 1
+                else:
+                    ep_num = 1
+
                 seasons_set.add(s_num)
                 sn_key = str(s_num)
                 if sn_key not in episodes_by_season:
@@ -487,19 +504,31 @@ async def player_api(
                 
                 ep_img_raw = ep.get("image_url") or show.get("poster_url") or show.get("image_url")
                 ep_img_proxy = image_proxy.build_proxy_url(base_url, ep_img_raw)
+                ep_title = ep.get("title") or f"Epizoda {ep_num}"
+                ep_id_int = to_int_id(ep["idec"], ep_num)
 
                 episodes_by_season[sn_key].append({
-                    "id": to_int_id(ep["idec"], ep.get("episode_num", 1)),
-                    "episode_num": ep.get("episode_num", 1),
-                    "title": ep.get("title") or f"Epizoda {ep.get('episode_num', 1)}",
+                    "id": ep_id_int,
+                    "episode_num": ep_num,
+                    "title": ep_title,
                     "container_extension": "m3u8",
+                    "season": s_num,
+                    "season_num": s_num,
+                    "season_number": s_num,
                     "info": {
-                        "name": ep.get("title") or f"Epizoda {ep.get('episode_num', 1)}",
+                        "name": ep_title,
+                        "season": s_num,
+                        "season_num": s_num,
+                        "season_number": s_num,
+                        "episode_num": ep_num,
                         "plot": ep.get("description", ""),
                         "duration_secs": ep.get("duration", 3600),
                         "duration": f"{ep.get('duration', 3600) // 60}:00",
                         "movie_image": ep_img_proxy
-                    }
+                    },
+                    "custom_sid": "",
+                    "added": str(now_ts),
+                    "direct_source": ""
                 })
 
             cover_url = image_proxy.build_proxy_url(base_url, show.get("poster_url") or show.get("image_url"), pad="2x3")
@@ -511,9 +540,10 @@ async def player_api(
                     "air_date": "",
                     "episode_count": len(episodes_by_season.get(str(sn), [])),
                     "id": sn,
-                    "name": f"Série {sn}",
+                    "name": f"Série {sn}" if sn > 0 else "Speciály",
                     "season_number": sn,
-                    "cover": cover_url
+                    "cover": cover_url,
+                    "cover_big": cover_url
                 })
 
             return {

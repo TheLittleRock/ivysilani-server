@@ -178,7 +178,53 @@ def test_xtream_series_api():
     series = resp_s.json()
     assert isinstance(series, list)
 
-    # 3. timeshift endpoint check
+    # 3. get_series_info (ověření struktury sérií a epizod pro Go / Crawler kompatibilitu)
+    crud.upsert_show(
+        show_id="999888777",
+        title="Testovací Seriál",
+        show_type="series"
+    )
+    crud.upsert_episode(
+        ep_id="999888777_s1e1",
+        show_id="999888777",
+        idec="11111",
+        title="Díl 1 S1",
+        season=1,
+        episode_num=1
+    )
+    crud.upsert_episode(
+        ep_id="999888777_s2e1",
+        show_id="999888777",
+        idec="22222",
+        title="Díl 1 S2",
+        season=2,
+        episode_num=1
+    )
+    info_resp = client.get("/player_api.php?username=admin&password=admin&action=get_series_info&series_id=999888777")
+    assert info_resp.status_code == 200
+    info_data = info_resp.json()
+    assert "seasons" in info_data
+    assert "episodes" in info_data
+    
+    # Ověříme, že v seasons jsou obě série se správnými season_number
+    s_numbers = [s["season_number"] for s in info_data["seasons"]]
+    assert 1 in s_numbers
+    assert 2 in s_numbers
+
+    # Ověříme, že každá epizoda má explicitní season a info.season jako int (prevence S00 chyby v crawleru)
+    ep_s1 = info_data["episodes"]["1"][0]
+    assert ep_s1["season"] == 1
+    assert ep_s1["season_number"] == 1
+    assert ep_s1["info"]["season"] == 1
+    assert ep_s1["episode_num"] == 1
+
+    ep_s2 = info_data["episodes"]["2"][0]
+    assert ep_s2["season"] == 2
+    assert ep_s2["season_number"] == 2
+    assert ep_s2["info"]["season"] == 2
+    assert ep_s2["episode_num"] == 1
+
+    # 4. timeshift endpoint check
     ts_resp = client.get("/streaming/timeshift.php?username=admin&password=admin&stream=1", follow_redirects=False)
     assert ts_resp.status_code in [302, 200]
 
@@ -191,6 +237,17 @@ def test_subtitle_proxy_endpoint():
     resp = client.get("/api/subtitles?url=https://www.ceskatelevize.cz/favicon.ico")
     assert resp.status_code == 200
     assert resp.headers.get("access-control-allow-origin") == "*"
+
+def test_admin_subtitle_settings():
+    # Test uložení posunu titulků přes admin UI
+    resp = client.post(
+        "/admin/settings/subtitles",
+        data={"subtitle_offset_seconds": "1.8"},
+        cookies=AUTH_COOKIES,
+        follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert crud.get_setting("subtitle_offset_seconds") == "1.8"
 
 def test_downloads_list_api():
     resp = client.get("/api/downloads/list", cookies=AUTH_COOKIES)
