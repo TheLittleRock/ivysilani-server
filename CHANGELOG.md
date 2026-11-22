@@ -6,6 +6,25 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.2.3] - 2026-11-22
+
+### Opraveno (Fixed)
+- **Korektní číslování epizod v Xtream Codes VOD a scraperu (Per-Season Episode Numbering):**
+  - Vyřešena chyba, kdy crawler čísloval epizody se shifted indexy (např. u animovaného seriálu *Čtyřlístek* začínala 1. série dílem `04` a 2. série dílem `11`).
+  - **Příčina:**
+    1. U seriálů, jejichž epizody nemají v názvu číslo dílu (např. *Kamarádi z Třeskoprsk*), scraper použil globální čítač `idx` běžící přes všechny série najednou. Speciály (Série 90) dostaly díly 1..3, 1. série díly 4..10 a 2. série díly 11..16.
+    2. Xtream Codes API (`get_series_info`) tyto posunuté indexy předávalo přímo crawleru.
+  - **Řešení:**
+    1. V `app/services/ct_service.py` (`scrape_show_metadata`) implementován nezávislý čítač epizod pro každou sérii (`season_counters[season_num]`), bezpečné parsování z IDEC a finální normalizační průchod, který garantuje sekvenci 1..N v každé sérii.
+    2. V `app/api/xtream.py` (`get_series_info`) přidána automatická normalizační vrstva: pokud epizody v libovolné sérii nezačínají od 1 nebo obsahují mezery/duplicity, jsou automaticky srovnány na 1..N.
+    3. Opraveno bezpečné procházení GraphQL odpovědi v `get_episodes_for_programme` (zamezení `AttributeError: 'NoneType' object has no attribute 'get'`).
+    4. Rozšířeno vyhledávání v `app/db/crud.py` (`get_episode_by_id_or_idec`) pro spolehlivou obsluhu filmů i dílů bez ohledu na formát ID.
+- **Garance doručení titulků do Crawleru a HLS přehrávačů:**
+  - V `app/api/stream.py` (`get_hls_master_playlist`) upraveno vkládání titulků: pokud pořad nabízí titulky, jsou případné původní CDN odkazy vždy nahrazeny naší vyčištěnou proxy stopou `/api/hls/subtitles/{idec}.m3u8` s posunem +1.8s a X-TIMESTAMP-MAP.
+  - V crawleru na serveru vyčištěna knihovna od dříve stažených poškozených souborů z ranních hodin (kdy ještě nebyl nasazen HLS subtitle fix).
+
+---
+
 ## [2.2.2] - 2026-11-22
 
 ### Opraveno (Fixed)

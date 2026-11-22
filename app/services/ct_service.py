@@ -196,16 +196,19 @@ def parse_season_number(season_title: str, ep_title: str = "", default: int = 1)
 
     return default
 
-def parse_episode_number(title: str, default: int = 1) -> int:
+def parse_episode_number(title: str, default: Optional[int] = 1) -> Optional[int]:
     """Extrahuje číslo dílu z názvu např. '1/26 Od začátku', 'Díl 5' apod."""
     if not title:
         return default
     num, _ = clean_episode_title(title)
     if num is not None:
         return num
-    m_num = re.search(r"\b(?:díl|epizoda|část)?\s*(\d+)\b", title, re.IGNORECASE)
-    if m_num:
-        return int(m_num.group(1))
+    m_exp = re.search(r"\b(?:díl|epizoda|část)\s*(\d+)\b", title, re.IGNORECASE)
+    if m_exp:
+        return int(m_exp.group(1))
+    m_start = re.match(r"^(\d+)\.\s+", title.strip())
+    if m_start:
+        return int(m_start.group(1))
     return default
 
 CZECH_MONTHS = {
@@ -574,8 +577,9 @@ class CTService:
                 r = await client.post(url, params=params, json={"query": query, "variables": variables})
                 if r.status_code == 200:
                     data = r.json()
-                    episodes_obj = data.get("data", {}).get("programme", {}).get("episodes", {})
-                    items = episodes_obj.get("items", [])
+                    programme_data = (data.get("data") or {}).get("programme") or {}
+                    episodes_obj = programme_data.get("episodes") or {}
+                    items = episodes_obj.get("items") or []
                     return items
         except Exception as e:
             logger.warning(f"Error fetching GraphQL episodes for programme {programme_id}: {e}")
@@ -970,6 +974,7 @@ class CTService:
                                 page3 = await self.get_episodes_for_programme(programme_id, limit=50, offset=100, order_by="oldest")
                                 gql_episodes.extend(page3)
 
+                    season_counters: Dict[int, int] = defaultdict(int)
                     for idx, ep_item in enumerate(gql_episodes, start=1):
                         ep_idec = str(ep_item.get("id") or "")
                         if not ep_idec or ep_idec in seen_idecs:
@@ -987,10 +992,19 @@ class CTService:
                         else:
                             season_num = parse_season_number(ep_season_title, ep_title=raw_ep_title, default=1)
 
+                        season_counters[season_num] += 1
+                        fallback_num = season_counters[season_num]
+
                         if clean_num is not None:
                             ep_num = clean_num
                         else:
-                            ep_num = parse_episode_number(raw_ep_title, default=idx)
+                            parsed = parse_episode_number(raw_ep_title, default=None)
+                            if parsed is not None:
+                                ep_num = parsed
+                            elif len(ep_idec) >= 4 and ep_idec[-4:].isdigit() and 1 <= int(ep_idec[-4:]) <= 500:
+                                ep_num = int(ep_idec[-4:])
+                            else:
+                                ep_num = fallback_num
 
                         ep_imgs = ep_item.get("images") or {}
                         ep_img = ep_imgs.get("card") or image_url
@@ -1010,6 +1024,7 @@ class CTService:
 
                     # Pokud GraphQL nevrátil epizody, zkusíme ep_previews z Apollo state
                     if not episodes and ep_previews:
+                        season_counters.clear()
                         for idx, p in enumerate(ep_previews, start=1):
                             p_idec = str(p.get("id") or "")
                             if not p_idec or p_idec in seen_idecs:
@@ -1020,7 +1035,21 @@ class CTService:
                             ep_title = clean_name
                             ep_season_title = (p.get("season") or {}).get("title", "")
                             season_num = parse_season_number(ep_season_title, ep_title=raw_ep_title, default=1)
-                            ep_num = clean_num if clean_num is not None else parse_episode_number(raw_ep_title, default=idx)
+
+                            season_counters[season_num] += 1
+                            fallback_num = season_counters[season_num]
+
+                            if clean_num is not None:
+                                ep_num = clean_num
+                            else:
+                                parsed = parse_episode_number(raw_ep_title, default=None)
+                                if parsed is not None:
+                                    ep_num = parsed
+                                elif len(p_idec) >= 4 and p_idec[-4:].isdigit() and 1 <= int(p_idec[-4:]) <= 500:
+                                    ep_num = int(p_idec[-4:])
+                                else:
+                                    ep_num = fallback_num
+
                             p_imgs = p.get("images") or {}
                             p_img = p_imgs.get("card({\"height\":270,\"width\":480})") or p_imgs.get("card") or image_url
 
@@ -1036,6 +1065,18 @@ class CTService:
                                 "is_playable": bool(p.get("playable", True)),
                                 "is_drm": False
                             })
+
+                    # Normalizace číslování dílů v rámci každé série:
+                    # Garantuje, že epizody v každé sérii začínají od 1 a nemají duplicity
+                    if episodes:
+                        by_season_map: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+                        for ep in episodes:
+                            by_season_map[ep["season"]].append(ep)
+                        for s_num, s_eps in by_season_map.items():
+                            nums = [e["episode_num"] for e in s_eps]
+                            if min(nums, default=1) > 1 or len(set(nums)) < len(nums):
+                                for i, e in enumerate(s_eps, start=1):
+                                    e["episode_num"] = i
 
                 # Fallback pro film nebo pokud seriál neměl dostupné epizody přes GraphQL ani previews
                 if not episodes:

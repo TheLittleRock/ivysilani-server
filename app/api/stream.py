@@ -209,9 +209,9 @@ async def get_hls_master_playlist(
                 else:
                     i += 1
 
-            # Injekce českých titulků pokud v master playlistu chybí
-            if has_subtitles and not subtitles:
-                subtitles.append(sub_line)
+            # Injekce / nahrazení českých titulků naší synchronizovanou HLS proxy stopou
+            if has_subtitles:
+                subtitles = [sub_line]
 
             # Volitelná filtrace podle kvality
             selected_variants = []

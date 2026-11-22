@@ -130,7 +130,7 @@ async def test_direct_vtt_and_hls_subtitle_routes(monkeypatch):
     assert resp_sub.status_code == 200
     assert "/api/subtitles/12345.vtt" in resp_sub.text
 
-    # 2. Master playlist s xtream=1 nebo crawler UA musí nabízet přímý .vtt odkaz v #EXT-X-MEDIA
+    # 2. Master playlist musí nabízet HLS .m3u8 odkaz v #EXT-X-MEDIA (podle RFC 8216)
     import unittest.mock as mock
     with mock.patch("httpx.AsyncClient.get") as mock_get:
         mock_resp = mock.MagicMock()
@@ -141,14 +141,14 @@ async def test_direct_vtt_and_hls_subtitle_routes(monkeypatch):
         # a) Požadavek s xtream=1
         resp_crawler = client.get("/api/hls/master/12345.m3u8?xtream=1")
         assert resp_crawler.status_code == 200
-        assert 'URI="http://testserver/api/subtitles/12345.vtt"' in resp_crawler.text
+        assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_crawler.text
 
         # b) Požadavek s User-Agentem xtream-gui
         resp_ua = client.get("/api/hls/master/12345.m3u8", headers={"User-Agent": "Mozilla/5.0 (compatible; xtream-gui/1.0)"})
         assert resp_ua.status_code == 200
-        assert 'URI="http://testserver/api/subtitles/12345.vtt"' in resp_ua.text
+        assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_ua.text
 
-        # c) Běžný přehrávač (např. TiviMate/VLC) bez xtream dostává .m3u8 playlist
+        # c) Běžný přehrávač (např. TiviMate/VLC)
         resp_player = client.get("/api/hls/master/12345.m3u8", headers={"User-Agent": "TiviMate/4.7.0"})
         assert resp_player.status_code == 200
         assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_player.text

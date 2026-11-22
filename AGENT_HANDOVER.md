@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.2.2` (definována v `app/version.py`)
+- **Verze projektu:** `2.2.3` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -121,6 +121,9 @@ flowchart TD
 3. **Stremio vs StreamCube manifest:**
    - Stremio manifest (`/stremio/.../manifest.json`) striktně vynechává Live TV (`types: ["series", "movie"]`), protože Stremio nativně nepodporuje M3U live playback.
    - StreamCube manifest (`/streamcube/.../manifest.json`) naopak Live TV a IPTV podporuje (`types: ["series", "movie", "tv", "iptv", "stream"]`).
+4. **Číslování dílů v seriálech (Episode Numbering per Season):**
+   - V ČT GraphQL API a Apollo state mohou být epizody více sérií vráceny v jednom poli, přičemž epizody bez číselného označení v názvu (např. *Čtyřlístek*) by při globálním číslování dostaly posunuté indexy (S01E04..S01E10, S02E11..S02E16).
+   - V `app/services/ct_service.py` i `app/api/xtream.py` je implementován per-season čítač a normalizační pass, který garantuje, že v každé sérii začíná číslování dílů od 1 (`1..N`).
 
 ---
 

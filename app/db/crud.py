@@ -482,7 +482,24 @@ def get_episodes_by_show(show_id: str, only_playable: bool = False) -> List[Dict
 def get_episode_by_idec(idec: str) -> Optional[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM episodes WHERE idec = ?", (idec,))
+        cursor.execute("SELECT * FROM episodes WHERE idec = ?", (str(idec),))
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute("SELECT * FROM episodes WHERE id = ?", (str(idec),))
+            row = cursor.fetchone()
+        return dict(row) if row else None
+
+def get_episode_by_id(ep_id: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM episodes WHERE id = ?", (str(ep_id),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def get_episode_by_id_or_idec(ident: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM episodes WHERE idec = ? OR id = ?", (str(ident), str(ident)))
         row = cursor.fetchone()
         return dict(row) if row else None
 

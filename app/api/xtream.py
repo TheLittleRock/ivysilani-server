@@ -389,8 +389,14 @@ async def player_api(
         # 6. VOD Detail
         if action == "get_vod_info":
             idec = str(vod_id or stream_id)
-            ep = crud.get_episode_by_idec(idec)
-            show = crud.get_show_by_id(ep["show_id"]) if ep else None
+            ep = crud.get_episode_by_id_or_idec(idec)
+            show = crud.get_show_by_id(idec) if not ep else crud.get_show_by_id(ep["show_id"])
+            if not ep and show:
+                eps = crud.get_episodes_by_show(show["id"])
+                if eps:
+                    ep = eps[0]
+                    idec = ep["idec"]
+
             title = ep["title"] if ep else (show["title"] if show else f"Pořad {idec}")
             desc = ep["description"] if ep else (show["description"] if show else "")
 
@@ -530,6 +536,19 @@ async def player_api(
                     "added": str(now_ts),
                     "direct_source": ""
                 })
+
+            # Normalizace episode_num v rámci každé série pro Xtream Codes:
+            # Zabraňuje posunu čísel dílů napříč sériemi (např. Čtyřlístek S01 4..10 -> 1..7, S02 11..16 -> 1..6)
+            for sn_key, s_eps in episodes_by_season.items():
+                if not s_eps:
+                    continue
+                s_eps.sort(key=lambda x: (x.get("episode_num", 0), str(x.get("id", ""))))
+                nums = [e["episode_num"] for e in s_eps]
+                if min(nums, default=1) > 1 or len(set(nums)) < len(nums):
+                    for i, e in enumerate(s_eps, start=1):
+                        e["episode_num"] = i
+                        if "info" in e and isinstance(e["info"], dict):
+                            e["info"]["episode_num"] = i
 
             cover_url = image_proxy.build_proxy_url(base_url, show.get("poster_url") or show.get("image_url"), pad="2x3")
             backdrop_url = image_proxy.build_proxy_url(base_url, show.get("backdrop_url") or show.get("poster_url") or show.get("image_url"))
@@ -795,9 +814,11 @@ async def vod_stream(
     check_auth(username=username, password=password, token=token)
     idec = stream_filename.split(".")[0]
     
-    # Ověříme, zda idec není show_id
-    ep = crud.get_episode_by_idec(idec)
-    if not ep:
+    # Ověříme, zda idec není show_id nebo episode_id
+    ep = crud.get_episode_by_id_or_idec(idec)
+    if ep:
+        idec = ep["idec"]
+    else:
         show = crud.get_show_by_id(idec)
         if show:
             eps = crud.get_episodes_by_show(show["id"])

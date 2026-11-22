@@ -283,4 +283,35 @@ def test_stremio_tmdb_id_pairing():
     assert meta_data["meta"]["id"] == "tt9362492"
     assert "poster" in meta_data["meta"]
 
+def test_series_episode_numbering_normalization():
+    # Test that shifted episode numbers (e.g. S01 starting at 4, S02 starting at 11)
+    # are normalized to 1..N per season in get_series_info
+    crud.upsert_show(
+        show_id="test_series_shifted",
+        title="Test Shifted Series",
+        show_type="series"
+    )
+    # Season 1 with shifted numbers (4, 5, 6)
+    crud.upsert_episode(ep_id="ep_s1_4", show_id="test_series_shifted", title="Díl 4", idec="90001", season=1, episode_num=4)
+    crud.upsert_episode(ep_id="ep_s1_5", show_id="test_series_shifted", title="Díl 5", idec="90002", season=1, episode_num=5)
+    crud.upsert_episode(ep_id="ep_s1_6", show_id="test_series_shifted", title="Díl 6", idec="90003", season=1, episode_num=6)
+
+    # Season 2 with shifted numbers (11, 12)
+    crud.upsert_episode(ep_id="ep_s2_11", show_id="test_series_shifted", title="Díl 11", idec="90011", season=2, episode_num=11)
+    crud.upsert_episode(ep_id="ep_s2_12", show_id="test_series_shifted", title="Díl 12", idec="90012", season=2, episode_num=12)
+
+    resp = client.get("/player_api.php?username=admin&password=admin&action=get_series_info&series_id=test_series_shifted")
+    assert resp.status_code == 200
+    data = resp.json()
+    episodes = data["episodes"]
+
+    # Season 1 should be normalized to 1, 2, 3
+    s1_nums = [e["episode_num"] for e in episodes["1"]]
+    assert s1_nums == [1, 2, 3]
+
+    # Season 2 should be normalized to 1, 2
+    s2_nums = [e["episode_num"] for e in episodes["2"]]
+    assert s2_nums == [1, 2]
+
+
 
