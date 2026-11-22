@@ -53,7 +53,7 @@ def shift_vtt_timestamps(vtt_text: str, offset_seconds: float = 1.8) -> str:
 @router.api_route("/subtitles", methods=["GET", "HEAD"])
 async def proxy_subtitles(url: str = Query(...), offset: Optional[float] = Query(None)):
     """Stáhne a přepošle WebVTT titulky z CDN České televize s CORS hlavičkou
-    a automatickým vyrovnáním časového posunu (defaultně +2.5s zpoždění pro dokonalou synchronizaci s videem).
+    a volitelným vyrovnáním časového posunu.
     """
     if not url.startswith("http://") and not url.startswith("https://"):
         raise HTTPException(status_code=400, detail="Invalid subtitle URL")
@@ -104,7 +104,7 @@ async def proxy_subtitles(url: str = Query(...), offset: Optional[float] = Query
 @router.api_route("/subtitles/{idec}.vtt", methods=["GET", "HEAD"])
 async def get_vtt_subtitles_by_idec(request: Request, idec: str, offset: Optional[float] = Query(None)):
     """Poskytuje WebVTT titulky přímo podle IDEC epizody/filmu.
-    Umožňuje přímé stažení titulků v crawleru (xtream-gui) i přehrávačích bez potřeby M3U8 obálky.
+    Umožňuje přímé stažení titulků v přehrávačích a stahovačích bez potřeby M3U8 obálky.
     """
     data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
     if not data or not data.get("subtitles"):
@@ -257,7 +257,7 @@ async def get_hls_master_playlist(
 
 @router.api_route("/hls/subtitles/{idec}.m3u8", methods=["GET", "HEAD"])
 async def get_hls_subtitle_playlist(request: Request, idec: str):
-    """Vrátí HLS WebVTT subtitle playlist pro IPTV přehrávače (TiviMate/VLC) a crawler."""
+    """Vrátí HLS WebVTT subtitle playlist pro IPTV přehrávače (TiviMate/VLC) a externí klienty."""
     data = await ct_service.resolve_vod_stream(idec, allow_drm=False)
     if not data or not data.get("subtitles"):
         raise HTTPException(status_code=404, detail="Subtitles not available")

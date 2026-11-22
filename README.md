@@ -15,7 +15,7 @@
   - Digitální a sportovní kanály: ČT sport Plus 1 až ČT sport Plus 8
 - **Katalog a archiv iVysílání (VOD):**
   - Procházení pořadů podle žánrů, vyhledávání v archivu ČT
-  - On-demand indexace i automatický crawler na pozadí
+  - On-demand indexace i automatická indexace na pozadí
   - Podpora přímého přidání libovolného pořadu zadáním URL nebo IDEC kódu
 - **Špičkové přehrávání a volba kvality:**
   - Moderní Web UI se **Shaka Player UI v4.7** a ovládací lištou s ozubeným kolečkem pro volbu rozlišení (1080p, 720p, 576p, 404p, automaticky)
@@ -31,7 +31,7 @@
   - Generování M3U playlistu (`/get.php`) s logy, skupinami a 14denním zpětným zhlédnutím (`catchup="default" catchup-days="14"`)
   - Automatické generování XMLTV EPG (`/xmltv.php`) s detailními časovými údaji a popisy pořadů
 - **Správce stahování a plná indexace archivu:**
-  - Hloubkový crawler 14 kategorií archivu iVysílání na pozadí s možností okamžitého spuštění z administrace
+  - Hloubková indexace 14 kategorií archivu iVysílání na pozadí s možností okamžitého spuštění z administrace
   - Vestavěné asynchronní stahování pořadů z iVysílání do souborů MP4 pomocí `ffmpeg`
 - **Správa uživatelů a zabezpečení:**
   - Multi-uživatelská správa v SQLite (přihlašovací jména, bcrypt hesla, expirace účtů, limity souběžných spojení)
@@ -215,9 +215,9 @@ Propojení s přehrávači je mimořádně jednoduché. Podporovány jsou všech
    `https://<domena>/streamcube/manifest.json` (nebo s tokenem `/streamcube/<token>/manifest.json`).
 2. Doplněk podporuje kompletní katalog filmů, seriálů i přímé živé vysílání 14 stanic ČT.
 
-### 7. Crawler & Go klienti (xtream-gui-linux / xtream-tui) 🤖
-- Server plně dodržuje striktní typování pro Go unmarshaler (`stream_id` a `series_id` jako celá čísla `int`).
-- V konfiguraci klienta (`~/.config/xtream-tui_config.toml`):
+### 7. Externí stahovače & Xtream Codes klienti 🤖
+- Server plně dodržuje striktní typování pro unmarshaler stahovacích aplikací (`stream_id` a `series_id` jako celá čísla `int`).
+- V konfiguraci klienta:
   ```toml
   server = "https://<domena>"
   username = "<vas_token_nebo_admin>"

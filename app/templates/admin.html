@@ -247,7 +247,7 @@
 
         <form method="POST" action="/admin/settings/subtitles" class="space-y-3 pt-1 text-xs">
             <div>
-                <label class="block text-slate-400 mb-1">Časový posun titulků (sekundy, výchozí 1.8s):</label>
+                <label class="block text-slate-400 mb-1">Časový posun titulků (sekundy, výchozí 0.0s):</label>
                 <div class="flex flex-col sm:flex-row gap-2">
                     <input type="number" step="0.1" name="subtitle_offset_seconds" value="{{ subtitle_offset_seconds }}" required
                            class="flex-grow px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-mono text-xs focus:outline-none focus:border-indigo-500" />
@@ -255,7 +255,7 @@
                         Uložit posun titulků
                     </button>
                 </div>
-                <p class="text-[11px] text-slate-500 mt-1.5">Kladná hodnota zpožďuje zobrazení titulků (např. 1.8s pro perfektní synchronizaci s audiem ČT).</p>
+                <p class="text-[11px] text-slate-500 mt-1.5">Kladná hodnota zpožďuje zobrazení titulků (0.0s pro nativní časování ČT).</p>
             </div>
         </form>
     </div>

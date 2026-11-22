@@ -178,7 +178,7 @@ def test_xtream_series_api():
     series = resp_s.json()
     assert isinstance(series, list)
 
-    # 3. get_series_info (ověření struktury sérií a epizod pro Go / Crawler kompatibilitu)
+    # 3. get_series_info (ověření struktury sérií a epizod pro kompatibilitu se stahovači a přehrávači)
     crud.upsert_show(
         show_id="999888777",
         title="Testovací Seriál",
@@ -211,7 +211,7 @@ def test_xtream_series_api():
     assert 1 in s_numbers
     assert 2 in s_numbers
 
-    # Ověříme, že každá epizoda má explicitní season a info.season jako int (prevence S00 chyby v crawleru)
+    # Ověříme, že každá epizoda má explicitní season a info.season jako int (prevence S00 chyby)
     ep_s1 = info_data["episodes"]["1"][0]
     assert ep_s1["season"] == 1
     assert ep_s1["season_number"] == 1

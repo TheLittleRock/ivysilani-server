@@ -139,12 +139,12 @@ async def test_direct_vtt_and_hls_subtitle_routes(monkeypatch):
         mock_get.return_value = mock_resp
 
         # a) Požadavek s xtream=1
-        resp_crawler = client.get("/api/hls/master/12345.m3u8?xtream=1")
-        assert resp_crawler.status_code == 200
-        assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_crawler.text
+        resp_xtream = client.get("/api/hls/master/12345.m3u8?xtream=1")
+        assert resp_xtream.status_code == 200
+        assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_xtream.text
 
-        # b) Požadavek s User-Agentem xtream-gui
-        resp_ua = client.get("/api/hls/master/12345.m3u8", headers={"User-Agent": "Mozilla/5.0 (compatible; xtream-gui/1.0)"})
+        # b) Požadavek s User-Agentem externího klienta
+        resp_ua = client.get("/api/hls/master/12345.m3u8", headers={"User-Agent": "Mozilla/5.0 (compatible; Downloader/1.0)"})
         assert resp_ua.status_code == 200
         assert 'URI="http://testserver/api/hls/subtitles/12345.m3u8"' in resp_ua.text
 

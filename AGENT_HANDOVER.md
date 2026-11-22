@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.3.0` (definována v `app/version.py`)
+- **Verze projektu:** `2.3.1` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -25,7 +25,7 @@ Všechny klíčové služby běží na vzdáleném serveru `koleje` pod Dockerem
 ```mermaid
 flowchart TD
     Internet([Internet / Klienti]) -->|HTTPS :443| NPM[Nginx Proxy Manager / OpenResty 'npm']
-    Crawler[Crawler 'crawler' xtream-gui-linux :8088] -->|HTTPS :443| NPM
+    ExtClients[Externí přehrávače a stahovače] -->|HTTPS :443| NPM
     NPM -->|HTTP :5002| App[ivysilani-server :5002]
     App -->|GraphQL / HLS / DASH| CT[Česká televize CDN & API]
     App -->|REST API| TMDB[The Movie Database API]
@@ -36,7 +36,6 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | `ivysilani-server` | `172.18.0.10` | `5002` | Hlavní FastAPI aplikace (Python 3.10/3.14) |
 | `npm` | `172.18.0.x` | `80, 443, 81` | OpenResty / Nginx Proxy Manager (reverzní proxy `ct.thelittlerock.cz`) |
-| `crawler` | `172.18.0.8` | `8088` | Go aplikace `xtream-gui-linux` (Crawler 2.0 / stahovač) |
 | `stream-cinema-m3u`| `172.18.0.x` | `8080` | Doplňkový streamovací server |
 
 ### Cesty na hostiteli `koleje`:
@@ -51,7 +50,7 @@ flowchart TD
 
 - **Web Administrátor:** `admin` (heslo je změněno v produkci, původní default `admin`)
 - **Produkční Token uživatele:** `ed78b3b873e850ad9eb9029e4fb61f83`
-- **Crawler Token uživatele:** `466ced59be1a6ec2086c981a2d4e73bf`
+- **Sekundární token uživatele:** `466ced59be1a6ec2086c981a2d4e73bf`
 - **TMDB API klíč:** `2f453df93e1dd76ca1e176029a0f9baf` (uložen v tabulce `app_settings` pod klíčem `tmdb_api_key`)
 
 ### Veřejné endpointy pro klienty:
@@ -84,28 +83,27 @@ flowchart TD
 - **Podporované časové formáty:** `YYYY-MM-DD:HH-MM`, `YYYYMMDDHHMMSS`, `YYYYMMDDHHMM`, Unix timestamp.
 
 ### C. Vertikální plakáty & Image Proxy (`app/services/image_proxy.py`, `scripts/enrich_all.py`)
-- Pro Stremio, TiviMate a Crawler jsou horizontální obrázky neestetické.
+- Pro Stremio, TiviMate a další přehrávače jsou horizontální obrázky neestetické.
 - Server preferuje oficiální vertikální plakát `cardPortrait` z GraphQL API České televize.
 - Následně ověřuje plakát na TMDB API v poměru 2:3.
 - Pokud je dostupný pouze horizontální plakát, `/api/image-proxy` provede canvas padding do poměru 2:3 s barevným vzorkováním okrajů (edge color sampling) bez deformace či ořezu obrazu.
 
-### D. Kompatibilita s Go klienty / Crawler (`app/api/xtream.py`)
-- Go unmarshaler v `xtream-gui-linux` striktně vyžaduje `stream_id` a `series_id` jako celá čísla (`int`), nikoliv textové řetězce.
+### D. Kompatibilita s externími stahovači a Go klienty (`app/api/xtream.py`)
+- Go unmarshaler v klientských aplikacích striktně vyžaduje `stream_id` a `series_id` jako celá čísla (`int`), nikoliv textové řetězce.
 - Funkce `to_int_id()` garantuje, že všechny VOD a seriálové položky posílají celočíselná ID.
-- **Season struktura v `get_series_info`:** Každá epizoda uvnitř `episodes[season_key]` i její podobjekt `info` MUSÍ obsahovat pole `"season": s_num` (typu `int`), `"season_num": s_num` a `"season_number": s_num`. Pokud toto pole chybí, Go struct unmarshaler v crawleru ponechá `ep.Season = 0` a vytvoří název souboru s chybným `S00` (např. `Show.S00E01.mp4`).
+- **Season struktura v `get_series_info`:** Každá epizoda uvnitř `episodes[season_key]` i její podobjekt `info` MUSÍ obsahovat pole `"season": s_num` (typu `int`), `"season_num": s_num` a `"season_number": s_num`. Pokud toto pole chybí, Go struct unmarshaler ponechá `ep.Season = 0` a vytvoří název souboru s chybným `S00` (např. `Show.S00E01.mp4`).
 - Server používá `GZipMiddleware`, čímž zmenšuje velikost katalogu z 570 KB na ~45 KB a předchází 502 chybám z důvodu přetečení proxy bufferu.
 
 ### E. Synchronizace WebVTT titulků (`app/api/stream.py`)
-- WebVTT soubory z CDN České televize začínají časovou osu od `00:00:00.000`, zatímco VOD HLS TS segmenty mají video leader / pre-roll (první PTS ~183600 ticks = ~2.04s).
-- Z toho důvodu byly titulky zobrazeny o cca 2 sekundy dříve, než herec promluvil.
-- Endpoint `/api/subtitles` má parametr `offset` (výchozí hodnota `settings.SUBTITLE_OFFSET_SECONDS = 1.8`, upravitelná v `/admin#subtitles-settings` přes tabulku `app_settings`), který přes funkci `shift_vtt_timestamps()` automaticky posouvá všechny časové značky o +1.8s dopředu v čase, čímž zajišťuje dokonalou synchronizaci zvuku a textu bez zpoždění.
-- Pro HLS přehrávače (VLC, TiviMate, ExoPlayer) server automaticky injektuje hlavičku `X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0`.
+- WebVTT soubory z CDN České televize začínají časovou osu od `00:00:00.000`.
+- Výchozí hodnota `settings.SUBTITLE_OFFSET_SECONDS` je nastavena na `0.0s` (nativní přesné časování). Pro uživatelské doladění je k dispozici pole v `/admin#subtitles-settings` (ukládá se do tabulky `app_settings` pod klíčem `subtitle_offset_seconds`).
+- Pro HLS přehrávače (VLC, TiviMate, ExoPlayer) server automaticky injektuje hlavičku `X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0` pro synchronizaci s MPEGTS časovou osou videa.
 
-### F. Stahování WebVTT titulků v Crawleru / xtream-gui (`app/api/stream.py`)
-- Go stahovač (`xtream-gui-linux` v kontejneru `crawler`) ve svém balíčku `internal/download` implementuje stahování a spojování titulků:
-  1. **Segmented HLS VTT (`playlistLooksLikeSegmentedVTT` / `writeLocalM3U8FromPlaylist` / `joined.vtt`):** URI titulků v master playlistu `#EXT-X-MEDIA:TYPE=SUBTITLES` musí odkazovat na `.m3u8` playlist (`/api/hls/subtitles/{idec}.m3u8`).
-  2. Uvnitř tohoto subtitle playlistu musí segmentové URL končit příponou `.vtt` (`/api/subtitles/{idec}.vtt`). Funkce `playlistLooksLikeSegmentedVTT` zkontroluje příponu, zaloguje `subs: playlist "Čeština" načten předem (1 segmentů)`, crawler stáhne segment `0.vtt`, spojí jej do `s_0/joined.vtt` a funkce `muxSlepenim` jej spolehlivě zabalí do MP4 (`Stream #0:2: Subtitle: mov_text`).
-  3. **Pozor na `isDirectVTT(uri)`:** Pokud by `#EXT-X-MEDIA:TYPE=SUBTITLES` v master playlistu odkazovalo přímo na `.vtt`, funkce `isDirectVTT` vrátí `true`, crawler přeskočí prefetch fázi a stopa se nedostane do muxeru (`0 titulky`). Proto master playlist VŽDY odkazuje na `/api/hls/subtitles/{idec}.m3u8`.
+### F. Stahování WebVTT titulků v externích klientech (`app/api/stream.py`)
+- Externí stahovače implementují stahování a spojování titulků podle standardu HLS RFC 8216:
+  1. **Segmented HLS VTT:** URI titulků v master playlistu `#EXT-X-MEDIA:TYPE=SUBTITLES` musí odkazovat na `.m3u8` playlist (`/api/hls/subtitles/{idec}.m3u8`).
+  2. Uvnitř tohoto subtitle playlistu musí segmentové URL končit příponou `.vtt` (`/api/subtitles/{idec}.vtt`). Stahovač stáhne segment `0.vtt` a spolehlivě jej zabalí do MP4 (`Stream #0:2: Subtitle: mov_text`).
+  3. Master playlist VŽDY odkazuje na `/api/hls/subtitles/{idec}.m3u8`.
   4. **Struktura master playlistu podle RFC 8216:** Všechny audio i subtitle `#EXT-X-MEDIA` tagy musí být umístěny na začátku souboru před variantami `#EXT-X-STREAM-INF:`. Za každým `#EXT-X-STREAM-INF:` musí bezprostředně následovat video URL (nesmí být proloženo dalším `#EXT-X-MEDIA` tagem, jinak parser variantu zahodí). Každý `#EXT-X-STREAM-INF:` obsahuje atribut `SUBTITLES="subs"`.
 
 ---
@@ -128,11 +126,8 @@ flowchart TD
    - Mnoho seriálů na iVysílání nemá vytvořené série (např. *Komisař Montalbano*, *13. komnata*, *Pan Tau*, *Dobrodružství kriminalistiky*, *Nemocnice na kraji města*) a ČT je vrací jako jednu dlouhou sérii 1.
    - TMDb je však člení do reálných televizních sérií (např. Montalbano 15 sérií, 13. komnata 16 sérií).
    - `tmdb_service.align_show_episodes(show_id)` páruje epizody podle normalizovaných názvů a kmenů slov a přeindexuje `season` a `episode_num` přímo v SQLite tabulce `episodes`.
-   - V `get_series_info` probíhá on-demand ověření a zarovnání při prvním dotazu crawleru.
+   - V `get_series_info` probíhá on-demand ověření a zarovnání při prvním dotazu klienta.
    - V administraci je dostupné tlačítko a endpoint `/api/admin/reindex-tmdb` pro hromadné přeindexování celého katalogu na pozadí.
-6. **Správa fronty crawleru (`queue.json`):**
-   - Fronta crawleru se nachází v kontejneru `crawler` na cestě `/home/ubuntu/.local/state/xtream-gui/queue.json`.
-   - Lze z ní hromadně smazat položky libovolného pořadu filtrem přes Python/JSON bez nutnosti proklikávat GUI.
 
 ---
 
