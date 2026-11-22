@@ -14,6 +14,16 @@ class TMDBService:
 
     def __init__(self):
         self._cache: Dict[str, Any] = {}
+        self._aligned_shows: Set[str] = set()
+
+    def is_show_aligned(self, show_id: str) -> bool:
+        return show_id in self._aligned_shows
+
+    def mark_show_aligned(self, show_id: str):
+        self._aligned_shows.add(show_id)
+
+    def clear_aligned_shows_cache(self):
+        self._aligned_shows.clear()
 
     def get_api_key(self) -> str:
         key = crud.get_setting("tmdb_api_key", "2f453df93e1dd76ca1e176029a0f9baf")
@@ -190,11 +200,19 @@ class TMDBService:
 
         return None
 
-    def normalize_title(self, text: str) -> str:
-        """Normalizuje název epizody pro spolehlivé porovnání (bez diakritiky, malá písmena, bez specifik seriálu)."""
+    def normalize_title(self, text: str, show_title: Optional[str] = None) -> str:
+        """Normalizuje název epizody pro spolehlivé porovnání (bez diakritiky, malá písmena, bez názvu seriálu)."""
         if not text:
             return ""
         t = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("utf-8").lower()
+        if show_title:
+            st = unicodedata.normalize("NFKD", str(show_title)).encode("ascii", "ignore").decode("utf-8").lower()
+            st_clean = re.sub(r"[^\w\s]", " ", st).strip()
+            if st_clean:
+                t = re.sub(re.escape(st_clean), " ", t)
+                for word in st_clean.split():
+                    if len(word) >= 4:
+                        t = re.sub(r"\b" + re.escape(word) + r"\b", " ", t)
         t = re.sub(r"13\s*\.?\s*komnata", " ", t)
         t = re.sub(r"komisar\s+montalbano", " ", t)
         t = re.sub(r"pan\s+tau", " ", t)
@@ -203,10 +221,10 @@ class TMDBService:
         t = re.sub(r"[^\w\s]", " ", t)
         return " ".join(t.split())
 
-    def _match_tokens(self, s1: str, s2: str) -> bool:
+    def _match_tokens(self, s1: str, s2: str, show_title: Optional[str] = None) -> bool:
         """Ověří shodu kmenů slov pro českou flexi (např. 'Tereza Pergnerová' vs 'Terezy Pergnerové')."""
-        n1 = self.normalize_title(s1)
-        n2 = self.normalize_title(s2)
+        n1 = self.normalize_title(s1, show_title)
+        n2 = self.normalize_title(s2, show_title)
         if not n1 or not n2:
             return False
         if n1 == n2 or n1 in n2 or n2 in n1:
@@ -276,6 +294,12 @@ class TMDBService:
         if not tid:
             return {"status": "no_tmdb", "message": f"No TMDb ID found for {show.get('title')}", "matched": 0}
 
+        # Uložíme zjištěné TMDb ID přímo k záznamu pořadu, pokud dosud chybělo
+        if tid and show.get("tmdb_id") != tid:
+            crud.update_show_tmdb(show_id=show_id, tmdb_id=tid)
+
+        self.mark_show_aligned(show_id)
+
         tmdb_eps = await self.get_tv_episodes(tid)
         if not tmdb_eps:
             return {"status": "no_tmdb_episodes", "message": f"No episodes on TMDb for {tid}", "matched": 0}
@@ -290,10 +314,11 @@ class TMDBService:
 
         matched_count = 0
         used_tmdb: Set[Tuple[int, int]] = set()
+        stitle = show.get("title", "")
 
         for ep in local_eps:
             ep_title = ep.get("title", "")
-            norm_title = self.normalize_title(ep_title)
+            norm_title = self.normalize_title(ep_title, stitle)
             best_match = None
 
             # a) Přesná shoda normalizovaného názvu
@@ -311,7 +336,7 @@ class TMDBService:
                     key = (tm["season"], tm["episode"])
                     if key in used_tmdb:
                         continue
-                    if self._match_tokens(ep_title, tm["name"]):
+                    if self._match_tokens(ep_title, tm["name"], stitle):
                         best_match = tm
                         break
 

@@ -482,19 +482,34 @@ async def player_api(
                 episodes = crud.get_episodes_by_show(s_id)
             playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
 
-            # Automatické dohledání a rozdělení do sérií podle TMDB (pokud má pořad v iVysílání jen 1 sérii)
-            existing_seasons = set(ep.get("season", 1) for ep in episodes)
-            if len(existing_seasons) <= 1 and len(playable_episodes) >= 4:
-                try:
-                    from app.services.tmdb_service import tmdb_service
-                    align_res = await tmdb_service.align_show_episodes(actual_id, show.get("tmdb_id"))
-                    if align_res.get("status") == "ok" and align_res.get("matched", 0) > 0:
-                        episodes = crud.get_episodes_by_show(actual_id)
-                        if not episodes and actual_id != s_id:
-                            episodes = crud.get_episodes_by_show(s_id)
-                        playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
-                except Exception as e:
-                    logger.debug(f"On-demand TMDB alignment skipped for {actual_id}: {e}")
+            # Automatické dohledání a rozdělení do sérií podle TMDB (pokud má pořad sloučené řady či anomálie)
+            from app.services.tmdb_service import tmdb_service
+            if not tmdb_service.is_show_aligned(actual_id):
+                existing_seasons = set(ep.get("season", 1) for ep in episodes)
+                pos_seasons = sorted([s for s in existing_seasons if 1 <= s <= 30])
+                has_gaps = len(pos_seasons) >= 2 and pos_seasons != list(range(pos_seasons[0], pos_seasons[-1] + 1))
+                has_extreme = any(20 < s < 1900 for s in existing_seasons)
+                s1_ep_count = sum(1 for ep in episodes if ep.get("season") == 1)
+                s1_overflow = s1_ep_count >= 6 and len(existing_seasons) > 1
+
+                needs_align = (
+                    (len(existing_seasons) <= 1 and len(playable_episodes) >= 2)
+                    or has_gaps
+                    or has_extreme
+                    or s1_overflow
+                    or bool(show.get("tmdb_id"))
+                )
+
+                if needs_align:
+                    try:
+                        align_res = await tmdb_service.align_show_episodes(actual_id, show.get("tmdb_id"))
+                        if align_res.get("status") == "ok" and align_res.get("matched", 0) > 0:
+                            episodes = crud.get_episodes_by_show(actual_id)
+                            if not episodes and actual_id != s_id:
+                                episodes = crud.get_episodes_by_show(s_id)
+                            playable_episodes = [ep for ep in episodes if ep.get("is_playable", 1)]
+                    except Exception as e:
+                        logger.debug(f"On-demand TMDB alignment skipped for {actual_id}: {e}")
 
             seasons_set = set()
             episodes_by_season = {}
@@ -552,17 +567,33 @@ async def player_api(
                 })
 
             # Normalizace episode_num v rámci každé série pro Xtream Codes:
-            # Zabraňuje posunu čísel dílů napříč sériemi (např. Čtyřlístek S01 4..10 -> 1..7, S02 11..16 -> 1..6)
-            for sn_key, s_eps in episodes_by_season.items():
-                if not s_eps:
-                    continue
-                s_eps.sort(key=lambda x: (x.get("episode_num", 0), str(x.get("id", ""))))
-                nums = [e["episode_num"] for e in s_eps]
-                if min(nums, default=1) > 1 or len(set(nums)) < len(nums):
-                    for i, e in enumerate(s_eps, start=1):
-                        e["episode_num"] = i
-                        if "info" in e and isinstance(e["info"], dict):
-                            e["info"]["episode_num"] = i
+            # POZOR: Pokud má pořad TMDb metadata nebo byl zarovnán podle TMDb, čísla dílů odpovídají
+            # skutečným číslům v sérii podle TMDb (i když na iVysílání chybí některé epizody,
+            # např. Bob a Bobek S03 má jen díly 6, 8..13 – ty MUSÍ zůstat 6, 8..13 a nesmí se přepsat na 1..7!).
+            has_tmdb_alignment = bool(show.get("tmdb_id")) or tmdb_service.is_show_aligned(actual_id)
+            if not has_tmdb_alignment:
+                for sn_key, s_eps in episodes_by_season.items():
+                    if not s_eps:
+                        continue
+                    s_eps.sort(key=lambda x: (x.get("episode_num", 0), str(x.get("id", ""))))
+                    nums = [e["episode_num"] for e in s_eps]
+                    if min(nums, default=1) > 1 or len(set(nums)) < len(nums):
+                        for i, e in enumerate(s_eps, start=1):
+                            e["episode_num"] = i
+                            if "info" in e and isinstance(e["info"], dict):
+                                e["info"]["episode_num"] = i
+            else:
+                # Pro zarovnané TMDb seriály pouze vyřešíme případné duplicity čísel
+                for sn_key, s_eps in episodes_by_season.items():
+                    if not s_eps:
+                        continue
+                    s_eps.sort(key=lambda x: (x.get("episode_num", 0), str(x.get("id", ""))))
+                    nums = [e["episode_num"] for e in s_eps]
+                    if len(nums) > 1 and len(set(nums)) < len(nums):
+                        for i, e in enumerate(s_eps, start=1):
+                            e["episode_num"] = i
+                            if "info" in e and isinstance(e["info"], dict):
+                                e["info"]["episode_num"] = i
 
             cover_url = image_proxy.build_proxy_url(base_url, show.get("poster_url") or show.get("image_url"), pad="2x3")
             backdrop_url = image_proxy.build_proxy_url(base_url, show.get("backdrop_url") or show.get("poster_url") or show.get("image_url"))

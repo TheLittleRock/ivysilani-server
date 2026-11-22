@@ -6,6 +6,22 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.3.2] - 2026-11-22
+
+### Opraveno (Fixed)
+- **Zachování přesného číslování dílů při neúplných sériích na iVysílání (TMDb Alignment by Name):**
+  - Vyřešena chyba u seriálů, které nemají na iVysílání publikovány všechny epizody (např. *Bob a Bobek* – 3. série má z 13 epizod online pouze 7 dílů).
+  - Původní normalizační logika při `min(nums) > 1` chybně přečíslovala epizody `6, 8, 9, 10, 11, 12, 13` na sekvenci `1, 2, 3, 4, 5, 6, 7`. V důsledku toho byl díl *V galerii* (epizoda 6) označen jako S03E01 (což v TMDb odpovídá dílu *Šťastní výherci*).
+  - Pro seriály zarovnané podle TMDb bylo zrušeno přepisování čísel dílů. Každá epizoda si striktně zachovává své skutečné číslo a řadu podle TMDb, i když některé úvodní nebo mezilehlé díly na iVysílání chybí.
+- **Oprava sloučených sérií (Komisař Montalbano):**
+  - Vyřešena chyba, kdy byly úvodní řady komisaře Montalbana sloučeny do jediné 1. série (původně 10 dílů v S01).
+  - Všech 37 dílů je nyní rozděleno a očíslováno do všech 15 sérií přesně podle standardu TMDb (S01: 2 díly, S02: 2 díly, S03: 2 díly, S04: 4 díly, S05: 2 díly atd.).
+  - Upravena logika on-demand i dávkového přeindexování v `app/api/xtream.py` a `app/services/archive_crawler.py` – zarovnání se spouští i v případě mezer v sériích (`has_gaps`), vysokých čísel řad či nadbytku dílů v 1. sérii.
+- **Oprava parsování formátů stopáže v `parse_season_number`:**
+  - Formáty stopáže a počty dílů jako `42× 26 minut` nebo `21× 52 minut` z ČT webu jsou nyní odfiltrovány a nejsou chybně parsovány jako extrémní čísla sérií (např. Série 42 a 21 u *Ranče U Zelené sedmy*).
+
+---
+
 ## [2.3.1] - 2026-11-22
 
 ### Opraveno (Fixed)

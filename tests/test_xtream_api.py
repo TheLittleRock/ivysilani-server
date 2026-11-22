@@ -347,6 +347,61 @@ async def test_tmdb_episode_matching_and_alignment(monkeypatch):
     assert ep_zlodej["season"] == 1
     assert ep_zlodej["episode_num"] == 1
 
+@pytest.mark.asyncio
+async def test_on_demand_series_info_aligns_season_gaps():
+    from unittest.mock import patch
+    from app.services.tmdb_service import tmdb_service
+    crud.upsert_show(show_id="montalbano_gap_test", title="Komisař Montalbano", show_type="series", tmdb_id="37290")
+    # Season 1 has S1 & S2 episodes, and Season 5 already exists (gap: missing S2, S3, S4)
+    crud.upsert_episode(ep_id="mg1", show_id="montalbano_gap_test", title="Tvar vody", idec="1011", season=1, episode_num=1)
+    crud.upsert_episode(ep_id="mg2", show_id="montalbano_gap_test", title="Hliněný pes", idec="1012", season=1, episode_num=2)
+    crud.upsert_episode(ep_id="mg3", show_id="montalbano_gap_test", title="Zloděj školních svačin", idec="1013", season=1, episode_num=3)
+    crud.upsert_episode(ep_id="mg4", show_id="montalbano_gap_test", title="Hlas houslí", idec="1014", season=1, episode_num=4)
+    crud.upsert_episode(ep_id="mg5", show_id="montalbano_gap_test", title="Bod zlomu", idec="1015", season=5, episode_num=1)
+
+    with patch.object(tmdb_service, "get_tv_episodes", return_value=[
+        {"season": 1, "episode": 1, "name": "Zloděj školních svačin", "norm_name": "zlodej skolnich svacin"},
+        {"season": 1, "episode": 2, "name": "Hlas houslí", "norm_name": "hlas housli"},
+        {"season": 2, "episode": 1, "name": "Tvar vody", "norm_name": "tvar vody"},
+        {"season": 2, "episode": 2, "name": "Hliněný pes", "norm_name": "hlineny pes"},
+        {"season": 5, "episode": 1, "name": "Bod zlomu", "norm_name": "bod zlomu"}
+    ]):
+        resp = client.get("/player_api.php?username=admin&password=admin&action=get_series_info&series_id=montalbano_gap_test")
+        assert resp.status_code == 200
+        data = resp.json()
+        seasons = [s["season_number"] for s in data["seasons"]]
+        assert 1 in seasons
+        assert 2 in seasons
+        assert 5 in seasons
+        eps_s2 = data["episodes"]["2"]
+        assert len(eps_s2) == 2
+        assert eps_s2[0]["title"] == "Tvar vody"
+
+@pytest.mark.asyncio
+async def test_series_info_preserves_tmdb_episode_numbers_when_episodes_missing():
+    crud.upsert_show(show_id="bob_bobek_test", title="Bob a Bobek", show_type="series", tmdb_id="70198")
+    # Only episodes 6, 8, 9, 10, 11, 12, 13 are playable (1-5 and 7 missing)
+    crud.upsert_episode(ep_id="bb_6", show_id="bob_bobek_test", title="V galerii", idec="20006", season=3, episode_num=6)
+    crud.upsert_episode(ep_id="bb_8", show_id="bob_bobek_test", title="V lázních", idec="20008", season=3, episode_num=8)
+    crud.upsert_episode(ep_id="bb_9", show_id="bob_bobek_test", title="Na pouti", idec="20009", season=3, episode_num=9)
+    crud.upsert_episode(ep_id="bb_10", show_id="bob_bobek_test", title="Při povodni", idec="20010", season=3, episode_num=10)
+    crud.upsert_episode(ep_id="bb_11", show_id="bob_bobek_test", title="Ve službách vědy", idec="20011", season=3, episode_num=11)
+    crud.upsert_episode(ep_id="bb_12", show_id="bob_bobek_test", title="Návštěva z vesmíru", idec="20012", season=3, episode_num=12)
+    crud.upsert_episode(ep_id="bb_13", show_id="bob_bobek_test", title="Na ostrově", idec="20013", season=3, episode_num=13)
+
+    resp = client.get("/player_api.php?username=admin&password=admin&action=get_series_info&series_id=bob_bobek_test")
+    assert resp.status_code == 200
+    data = resp.json()
+    s3_eps = data["episodes"]["3"]
+    assert len(s3_eps) == 7
+    ep_nums = [e["episode_num"] for e in s3_eps]
+    assert ep_nums == [6, 8, 9, 10, 11, 12, 13]
+    assert s3_eps[0]["title"] == "V galerii"
+    assert s3_eps[0]["episode_num"] == 6
+    assert s3_eps[0]["info"]["episode_num"] == 6
+
+
+
 
 
 

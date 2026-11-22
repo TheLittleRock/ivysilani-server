@@ -190,10 +190,17 @@ def parse_season_number(season_title: str, ep_title: str = "", default: int = 1)
     if m_yr:
         return int(m_yr.group(1))
 
-    # Základní fallback
-    m_basic = re.search(r"\b(\d+)\b", s)
+    # 7. Odstraníme formáty stopáže a počtu dílů jako '42× 26 minut', '21× 52 minut', '14 dílů'
+    s_clean = re.sub(r"\d+\s*[×x]\s*\d+\s*minut\w*", " ", s)
+    s_clean = re.sub(r"\d+\s*[×x]", " ", s_clean)
+    s_clean = re.sub(r"\d+\s*(?:minut\w*|min\b|díl\w*|epizod\w*|část\w*)", " ", s_clean)
+
+    # Základní fallback - pouze pro platná čísla sérií (1 až 30)
+    m_basic = re.search(r"\b(\d+)\b", s_clean)
     if m_basic:
-        return int(m_basic.group(1))
+        val = int(m_basic.group(1))
+        if 1 <= val <= 30:
+            return val
 
     return default
 
@@ -1075,7 +1082,7 @@ class CTService:
                             by_season_map[ep["season"]].append(ep)
                         for s_num, s_eps in by_season_map.items():
                             nums = [e["episode_num"] for e in s_eps]
-                            if min(nums, default=1) > 1 or len(set(nums)) < len(nums):
+                            if (len(nums) > 1 and len(set(nums)) < len(nums)) or any(n <= 0 for n in nums):
                                 for i, e in enumerate(s_eps, start=1):
                                     e["episode_num"] = i
 

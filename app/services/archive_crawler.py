@@ -433,7 +433,8 @@ class ArchiveCrawler:
         with crud.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT s.id, s.title, s.tmdb_id, COUNT(e.id) as ep_count, MAX(e.season) as max_s
+                SELECT s.id, s.title, s.tmdb_id, COUNT(e.id) as ep_count, MAX(e.season) as max_s,
+                       GROUP_CONCAT(DISTINCT e.season) as seasons_str
                 FROM shows s
                 JOIN episodes e ON s.id = e.show_id
                 WHERE s.show_type = 'series'
@@ -447,12 +448,24 @@ class ArchiveCrawler:
         total = len(shows)
         for idx, s in enumerate(shows, 1):
             try:
-                if s.get("max_s", 1) <= 1:
+                seasons_str = s.get("seasons_str") or ""
+                try:
+                    seasons = sorted([int(x) for x in seasons_str.split(",") if x.isdigit()])
+                except Exception:
+                    seasons = []
+
+                pos_seasons = [x for x in seasons if 1 <= x <= 30]
+                has_gaps = len(pos_seasons) >= 2 and pos_seasons != list(range(pos_seasons[0], pos_seasons[-1] + 1))
+                has_extreme = any(20 < x < 1900 for x in seasons)
+                is_single = s.get("max_s", 1) <= 1
+                has_tmdb = bool(s.get("tmdb_id"))
+
+                if is_single or has_gaps or has_extreme or has_tmdb:
                     res = await tmdb_service.align_show_episodes(s["id"], s.get("tmdb_id"))
                     if res.get("status") == "ok" and res.get("matched", 0) > 0:
                         aligned_count += 1
                         logger.info(f"[{idx}/{total}] Přeindexován seriál {s['title']}: {res['matched']}/{res['total']} dílů do sérií {res['seasons']}.")
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.1)
             except Exception as e:
                 logger.warning(f"Chyba při přeindexování {s.get('id')}: {e}")
 

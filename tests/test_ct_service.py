@@ -30,3 +30,14 @@ async def test_resolve_vod_stream_drm_fallback():
     assert stream_info["url"].startswith("http")
     # Verify it has subtitles if present
     assert "subtitles" in stream_info
+
+def test_parse_season_number():
+    from app.services.ct_service import parse_season_number
+    assert parse_season_number("I. řada") == 1
+    assert parse_season_number("2. série") == 2
+    assert parse_season_number("StarDance XIV (2026)") == 14
+    assert parse_season_number("42× 26 minut", default=1) == 1
+    assert parse_season_number("21× 52 minut", default=1) == 1
+    assert parse_season_number("14 dílů", default=1) == 1
+    assert parse_season_number("V. řada") == 5
+

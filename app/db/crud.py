@@ -255,7 +255,7 @@ def get_show_by_tmdb_id(tmdb_id: str) -> Optional[Dict[str, Any]]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def update_show_tmdb(show_id: str, tmdb_id: str, imdb_id: str, tmdb_poster: str = "", tmdb_backdrop: str = "") -> bool:
+def update_show_tmdb(show_id: str, tmdb_id: str, imdb_id: str = "", tmdb_poster: str = "", tmdb_backdrop: str = "") -> bool:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""

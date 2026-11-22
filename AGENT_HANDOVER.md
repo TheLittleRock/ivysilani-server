@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.3.1` (definována v `app/version.py`)
+- **Verze projektu:** `2.3.2` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -119,14 +119,15 @@ flowchart TD
 3. **Stremio vs StreamCube manifest:**
    - Stremio manifest (`/stremio/.../manifest.json`) striktně vynechává Live TV (`types: ["series", "movie"]`), protože Stremio nativně nepodporuje M3U live playback.
    - StreamCube manifest (`/streamcube/.../manifest.json`) naopak Live TV a IPTV podporuje (`types: ["series", "movie", "tv", "iptv", "stream"]`).
-4. **Číslování dílů v seriálech (Episode Numbering per Season):**
+4. **Číslování dílů v seriálech a neúplné řady (Preserving TMDb Numbers):**
    - V ČT GraphQL API a Apollo state mohou být epizody více sérií vráceny v jednom poli, přičemž epizody bez číselného označení v názvu (např. *Čtyřlístek*) by při globálním číslování dostaly posunuté indexy (S01E04..S01E10, S02E11..S02E16).
-   - V `app/services/ct_service.py` i `app/api/xtream.py` je implementován per-season čítač a normalizační pass, který garantuje, že v každé sérii začíná číslování dílů od 1 (`1..N`).
+   - V `app/services/ct_service.py` je implementován per-season čítač garantující správné lokální indexování.
+   - **Kritické pravidlo pro neúplné řady:** Pokud iVysílání nabízí pouze podmnožinu dílů v sérii (např. *Bob a Bobek* S03 nabízí pouze 7 dílů: 6, 8, 9, 10, 11, 12, 13 z celkových 13 dílů), `get_series_info` a scraper NIKDY nesmí tyto díly přečíslovat na `1..7`! Díly si striktně zachovávají autentické TMDb číslování (S03E06 *V galerii*, S03E08 *V lázních* atd.), aby odpovídaly metadatům v externích přehrávačích a mediálních serverech.
 5. **Zarovnání sérií a epizod podle TMDb (TMDb Alignment):**
-   - Mnoho seriálů na iVysílání nemá vytvořené série (např. *Komisař Montalbano*, *13. komnata*, *Pan Tau*, *Dobrodružství kriminalistiky*, *Nemocnice na kraji města*) a ČT je vrací jako jednu dlouhou sérii 1.
+   - Mnoho seriálů na iVysílání nemá vytvořené série (např. *Komisař Montalbano*, *13. komnata*, *Pan Tau*, *Dobrodružství kriminalistiky*, *Nemocnice na kraji města*) a ČT je vrací v jediné 1. sérii, nebo má první série sloučené úvodní řady.
    - TMDb je však člení do reálných televizních sérií (např. Montalbano 15 sérií, 13. komnata 16 sérií).
    - `tmdb_service.align_show_episodes(show_id)` páruje epizody podle normalizovaných názvů a kmenů slov a přeindexuje `season` a `episode_num` přímo v SQLite tabulce `episodes`.
-   - V `get_series_info` probíhá on-demand ověření a zarovnání při prvním dotazu klienta.
+   - V `get_series_info` probíhá on-demand ověření a zarovnání při prvním dotazu klienta, reagující na mezery v sériích (`has_gaps`), vysoké hodnoty řad či přebytek dílů v S1.
    - V administraci je dostupné tlačítko a endpoint `/api/admin/reindex-tmdb` pro hromadné přeindexování celého katalogu na pozadí.
 
 ---
