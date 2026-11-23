@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.3.3` (definována v `app/version.py`)
+- **Verze projektu:** `2.3.4` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -130,8 +130,14 @@ flowchart TD
    - Mnoho seriálů na iVysílání nemá vytvořené série (např. *Komisař Montalbano*, *13. komnata*, *Pan Tau*, *Dobrodružství kriminalistiky*, *Nemocnice na kraji města*) a ČT je vrací v jediné 1. sérii, nebo má první série sloučené úvodní řady.
    - TMDb je však člení do reálných televizních sérií (např. Montalbano 15 sérií, 13. komnata 16 sérií).
    - `tmdb_service.align_show_episodes(show_id)` páruje epizody podle normalizovaných názvů a kmenů slov a přeindexuje `season` a `episode_num` přímo v SQLite tabulce `episodes`.
-   - V `get_series_info` probíhá on-demand ověření a zarovnání při prvním dotazu klienta, reagující na mezery v sériích (`has_gaps`), vysoké hodnoty řad či přebytek dílů v S1.
+   - V `archive_crawler.py` v metodě `index_show` probíhá automatické TMDb obohacení a zarovnání ihned při indexaci každého seriálu. Stav zarovnání se trvale ukládá do `app_settings` (`aligned_{show_id}`), takže přetrvá restart serveru.
+   - Odstraněno omezení `len(tmdb_seasons) <= 1`, což umožňuje zarovnat a opravit i pořady s anomálními čísly sérií (např. *Ať žijí rytíři!*, *Špačkovi v síti času*).
    - V administraci je dostupné tlačítko a endpoint `/api/admin/reindex-tmdb` pro hromadné přeindexování celého katalogu na pozadí.
+6. **Okamžité přehrávání ve Full HD (1080p) z M3U a Live streamů:**
+   - Standardní HLS přehrávače při čtení master playlistu s více rozlišeními (180p..1080p) kvůli ABR algoritmům začínají na nejnižším rozlišení a přepínají až po změření propustnosti (cca po 3–5 sekundách).
+   - Endpoint `/live/{token}/{stream_filename}` dynamicky přepisuje master playlist a servíruje 1080p FHD jako primární variantu streamu s okamžitým startem.
+   - M3U playlist (`/get.php`) navíc obsahuje vlastnosti `#KODIPROP:inputstream.adaptive.default_bandwidth=100000000` a `max_bandwidth=100000000`.
+   - VOD a catch-up master playlisty (`/api/hls/master/{idec}.m3u8`) řadí varianty sestupně podle bitratu a catch-up požadavky automaticky předávají `quality=1080p`.
 
 ---
 

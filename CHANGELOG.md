@@ -6,6 +6,25 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.3.4] - 2026-11-23
+
+### Opraveno (Fixed)
+- **Okamžité přehrávání ve Full HD (1080p) z M3U a Live streamů:**
+  - Endpoint `/live/{token}/{stream_filename}` dynamicky přepisuje HLS master playlist živého vysílání tak, aby výchozí a primární video variantou byl 1080p stream (FHD). Tím se zcela eliminuje počáteční zpožděné přepínání z nízkého rozlišení (180p/360p) v IPTV aplikacích (TiviMate, Kodi, VLC, Televizo, OTT Navigator).
+  - Všechny audio stopy (včetně prostorového zvuku a zvukového popisu) a WebVTT titulky zůstávají plně zachovány v souladu s RFC 8216.
+  - Do M3U playlistu (`/get.php`) přidány vlastnosti `#KODIPROP:inputstream.adaptive.default_bandwidth=100000000`, `max_bandwidth=100000000` a `stream_selection_type=auto` pro okamžitý start v plné kvalitě v přehrávači Kodi.
+  - VOD master playlist `/api/hls/master/{idec}.m3u8` nyní řadí varianty sestupně podle datového toku (1080p vždy první) a endpointy pro zpětné zhlédnutí (`/streaming/timeshift.php` i catch-up v `/live`) automaticky požadují `quality=1080p`.
+- **Automatické a perzistentní zarovnání sérií a epizod podle TMDb:**
+  - V `app/services/archive_crawler.py` integrováno okamžité volání `tmdb_service.enrich_show_metadata` a `tmdb_service.align_show_episodes` do metody `index_show`. Každý nově zaindexovaný nebo zaktualizovaný seriál je ihned automaticky zarovnán podle struktury TMDb přímo v SQLite databázi.
+  - Po dokončení celkového indexačního cyklu `crawl_entire_catalog` se automaticky spouští hromadná kontrola a reindexace všech seriálů v katalogu.
+  - Odstraněno blokující omezení `len(tmdb_seasons) <= 1` v `align_show_episodes`, které bránilo opravě pořadů s anomálními čísly řad (např. *Ať žijí rytíři!*, *Špačkovi v síti času*).
+  - V `app/services/tmdb_service.py` je stav zarovnání (`is_show_aligned`) nyní trvale ukládán do tabulky `app_settings` (`aligned_{show_id}`), takže přetrvá restart serveru a kontejneru.
+  - Vylepšena normalizace názvů epizod `clean_episode_title` i `normalize_title` o spolehlivější ořezávání prefixů číslování (`1/13 `, `1. `, `Díl 1: ` apod.).
+  - Opravena detekce v `parse_season_number` – pravidlo pro řadu 6 u *Vyprávěj Osudy* bylo omezeno pouze na seriál *Vyprávěj*, čímž se předešlo chybnému zařazování nesouvisejících pořadů s "osudy" v názvu do 6. série.
+  - Vyčištěna všechna historická anomální čísla sérií v databázi (hodnoty 31 až 1899) a provedena kompletní reindexace všech problematických seriálů (*Komisař Montalbano*, *Četnické humoresky*, *Bob a Bobek*, *Ranč U Zelené sedmy*, *Manželské etudy*, *Ať žijí rytíři!*, *Špačkovi v síti času*).
+
+---
+
 ## [2.3.3] - 2026-11-23
 
 ### Opraveno (Fixed)

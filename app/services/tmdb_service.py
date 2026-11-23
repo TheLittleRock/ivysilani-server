@@ -17,10 +17,17 @@ class TMDBService:
         self._aligned_shows: Set[str] = set()
 
     def is_show_aligned(self, show_id: str) -> bool:
-        return show_id in self._aligned_shows
+        if show_id in self._aligned_shows:
+            return True
+        val = crud.get_setting(f"aligned_{show_id}")
+        if val == "1":
+            self._aligned_shows.add(show_id)
+            return True
+        return False
 
     def mark_show_aligned(self, show_id: str):
         self._aligned_shows.add(show_id)
+        crud.set_setting(f"aligned_{show_id}", "1")
 
     def clear_aligned_shows_cache(self):
         self._aligned_shows.clear()
@@ -205,6 +212,8 @@ class TMDBService:
         if not text:
             return ""
         t = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("utf-8").lower()
+        # Odstranění prefixů číslování dílů (např. '1/13 ', '1. ', 'díl 1: ')
+        t = re.sub(r"^\s*(?:díl|dil|epizoda|cast|část)?\s*\d+\s*[\.\:\-\/]\s*", " ", t)
         if show_title:
             st = unicodedata.normalize("NFKD", str(show_title)).encode("ascii", "ignore").decode("utf-8").lower()
             st_clean = re.sub(r"[^\w\s]", " ", st).strip()
@@ -218,6 +227,8 @@ class TMDBService:
         t = re.sub(r"pan\s+tau", " ", t)
         t = re.sub(r"dobrodruzstvi\s+kriminalistiky", " ", t)
         t = re.sub(r"nemocnice\s+na\s+kraji\s+mesta", " ", t)
+        t = re.sub(r"cetnicke\s+humoresky", " ", t)
+        t = re.sub(r"ranc\s+u\s+zelene\s+sedmy", " ", t)
         t = re.sub(r"[^\w\s]", " ", t)
         return " ".join(t.split())
 
@@ -227,7 +238,9 @@ class TMDBService:
         n2 = self.normalize_title(s2, show_title)
         if not n1 or not n2:
             return False
-        if n1 == n2 or n1 in n2 or n2 in n1:
+        if n1 == n2:
+            return True
+        if (len(n1) >= 4 and n1 in n2) or (len(n2) >= 4 and n2 in n1):
             return True
         t1 = set(w[:4] for w in n1.split() if len(w) >= 3)
         t2 = set(w[:4] for w in n2.split() if len(w) >= 3)
@@ -305,12 +318,17 @@ class TMDBService:
             return {"status": "no_tmdb_episodes", "message": f"No episodes on TMDb for {tid}", "matched": 0}
 
         tmdb_seasons = sorted(list(set(e["season"] for e in tmdb_eps)))
-        if len(tmdb_seasons) <= 1:
-            return {"status": "single_season_tmdb", "matched": 0}
-
         local_eps = crud.get_episodes_by_show(show_id)
         if not local_eps:
             return {"status": "no_local_episodes", "matched": 0}
+
+        # Pokud má TMDb pouze 1 sérii a lokální díly už jsou všechny v sérii 1 bez anomálií a s odpovídajícími čísly, není třeba přepočítávat
+        existing_seasons = set(ep.get("season", 1) for ep in local_eps)
+        has_anomalous_seasons = any(s > 30 or s < 1 for s in existing_seasons) or len(existing_seasons) > 1
+        if len(tmdb_seasons) <= 1 and not has_anomalous_seasons and len(existing_seasons) <= 1:
+            existing_nums = [ep.get("episode_num", 0) for ep in local_eps]
+            if len(existing_nums) == len(set(existing_nums)) and min(existing_nums, default=1) == 1 and max(existing_nums, default=1) == len(local_eps) and len(local_eps) == len(tmdb_eps):
+                return {"status": "already_aligned_single_season", "matched": len(local_eps), "seasons": tmdb_seasons}
 
         matched_count = 0
         used_tmdb: Set[Tuple[int, int]] = set()

@@ -1,6 +1,7 @@
 import time
 import logging
 import base64
+import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional, Union, Any
@@ -721,7 +722,7 @@ async def live_stream(
             forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
             forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
             base_url = f"{forwarded_proto}://{forwarded_host}"
-            return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
+            return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8?quality=1080p", status_code=302)
 
         # Fallback na ČT unencrypted HbbTV timeshift stream
         stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
@@ -735,6 +736,78 @@ async def live_stream(
         raise HTTPException(status_code=503, detail="Unable to resolve live stream from ČT")
 
     stream_url = stream_data.get("hls_url") or stream_data["url"]
+
+    # Pro HLS živé streamy dynamicky přepíšeme master playlist tak, aby obsahoval FHD (1080p)
+    # jako výchozí / jedinou variantu streamu (zabrání počátečnímu přehrávání v nízkém rozlišení).
+    if stream_filename.endswith(".m3u8"):
+        quality = request.query_params.get("quality")
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                resp = await client.get(stream_url)
+                if resp.status_code == 200:
+                    lines = [l.strip() for l in resp.text.splitlines() if l.strip()]
+                    headers = []
+                    audios = []
+                    subtitles = []
+                    variants = []
+                    i = 0
+                    while i < len(lines):
+                        line = lines[i]
+                        if line.startswith("#EXTM3U") or line.startswith("#EXT-X-VERSION") or line.startswith("#EXT-X-INDEPENDENT"):
+                            headers.append(line)
+                            i += 1
+                        elif line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+                            audios.append(line)
+                            i += 1
+                        elif line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
+                            subtitles.append(line)
+                            i += 1
+                        elif line.startswith("#EXT-X-STREAM-INF:"):
+                            inf_line = line
+                            uri_line = lines[i+1] if i + 1 < len(lines) else ""
+                            i += 2
+                            bw_match = re.search(r"BANDWIDTH=(\d+)", inf_line)
+                            bw = int(bw_match.group(1)) if bw_match else 0
+                            res_match = re.search(r'RESOLUTION="?(\d+x\d+)"?', inf_line)
+                            res = res_match.group(1) if res_match else ""
+                            variants.append((inf_line, uri_line, bw, res))
+                        else:
+                            i += 1
+
+                    variants.sort(key=lambda x: x[2], reverse=True)
+
+                    if quality == "all":
+                        selected = variants
+                    elif quality == "720p":
+                        selected = [v for v in variants if "1280x720" in v[3] or (2500000 <= v[2] <= 4500000)]
+                    elif quality in ["576p", "540p"]:
+                        selected = [v for v in variants if (1500000 <= v[2] <= 2500000)]
+                    else:
+                        selected = [v for v in variants if "1920x1080" in v[3] or v[2] >= 5000000]
+
+                    if not selected:
+                        selected = variants[:1]
+
+                    out_lines = []
+                    out_lines.extend(headers)
+                    out_lines.extend(audios)
+                    out_lines.extend(subtitles)
+                    for inf, uri, _, _ in selected:
+                        out_lines.append(inf)
+                        out_lines.append(uri)
+
+                    return Response(
+                        content="\n".join(out_lines),
+                        media_type="application/vnd.apple.mpegurl",
+                        headers={
+                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                            "Cache-Control": "public, max-age=60"
+                        }
+                    )
+        except Exception as e:
+            logger.warning(f"Error rewriting live master playlist for {ch_code}: {e}")
+
     if settings.STREAM_MODE == "proxy":
         client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
         req = client.build_request("GET", stream_url)
@@ -787,7 +860,7 @@ async def timeshift_stream(
         prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
         if prog and prog.get("idec"):
             logger.info(f"Catchup Timeshift nalezen pro {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
-            return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
+            return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8?quality=1080p", status_code=302)
 
     # Fallback na ČT živý / timeshift HLS stream
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
@@ -846,7 +919,7 @@ async def timeshift_direct_stream(
     prog = crud.get_epg_programme_by_time(ch["epg_id"], ts)
     if prog and prog.get("idec"):
         logger.info(f"Timeshift direct VOD match found for {ch['name']}: {prog['title']} (IDEC: {prog['idec']})")
-        return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8", status_code=302)
+        return RedirectResponse(url=f"{base_url}/api/hls/master/{prog['idec']}.m3u8?quality=1080p", status_code=302)
 
     # 2. Fallback na ČT unencrypted HbbTV timeshift stream
     stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=False)
@@ -918,6 +991,9 @@ async def get_m3u(
         lines.append(f'#EXTINF:-1 tvg-id="{ch["epg_id"]}" tvg-name="{ch["name"]}" tvg-logo="{logo_url}" group-title="{ch["category"]}" catchup="default" catchup-days="14" catchup-source="{catchup_src}",{ch["name"]}')
         lines.append('#KODIPROP:inputstream=inputstream.adaptive')
         lines.append('#KODIPROP:inputstream.adaptive.manifest_type=hls')
+        lines.append('#KODIPROP:inputstream.adaptive.stream_selection_type=auto')
+        lines.append('#KODIPROP:inputstream.adaptive.default_bandwidth=100000000')
+        lines.append('#KODIPROP:inputstream.adaptive.max_bandwidth=100000000')
         lines.append(stream_url)
 
     content = "\n".join(lines)

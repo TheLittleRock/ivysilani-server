@@ -129,6 +129,18 @@ class ArchiveCrawler:
                     is_drm=ep.get("is_drm", False)
                 )
 
+            # Pro seriály automaticky obohatíme metadata a zarovnáme série a epizody podle TMDb
+            if show_data.get("show_type") == "series" and len(show_data.get("episodes", [])) >= 2:
+                try:
+                    from app.services.tmdb_service import tmdb_service
+                    enrich = await tmdb_service.enrich_show_metadata(show_data)
+                    tid = (enrich or {}).get("tmdb_id") or show_data.get("tmdb_id")
+                    align_res = await tmdb_service.align_show_episodes(show_id, tid)
+                    if align_res.get("status") == "ok":
+                        logger.info(f"Seriál {show_data['title']} automaticky zarovnán podle TMDb: {align_res.get('matched')}/{align_res.get('total')} epizod.")
+                except Exception as e:
+                    logger.debug(f"Automatické TMDb zarovnání pro {show_id} selhalo: {e}")
+
             logger.info(f"Pořad doindexován: {show_data['title']} ({len(show_data.get('episodes', []))} epizod)")
             return True
         except Exception as e:
@@ -388,6 +400,10 @@ class ArchiveCrawler:
                 await self.index_show(spec_slug)
 
             logger.info(f"Kompletní indexace iVysílání dokončena! Celkem v katalogu: {total_indexed} pořadů.")
+            try:
+                await self.reindex_all_shows_tmdb()
+            except Exception as e:
+                logger.warning(f"Chyba při automatickém TMDb zarovnání po indexaci: {e}")
             crud.set_setting("last_crawl_info", json.dumps({
                 "timestamp": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
                 "duration_seconds": int(time.time()) - self.stats["start_time"],
@@ -430,8 +446,18 @@ class ArchiveCrawler:
         """Obohatí a zarovná epizody všech seriálů podle TMDB na pozadí."""
         from app.services.tmdb_service import tmdb_service
         logger.info("Spouštím TMDB přeindexování epizod pro všechny seriály...")
+
+        # 1. Vyčištění případných historických anomálních čísel sérií (31 až 1899)
         with crud.get_db() as conn:
             cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE episodes
+                SET season = 1
+                WHERE season > 30 AND season < 1900
+            """)
+            if cursor.rowcount > 0:
+                logger.info(f"Opraveno {cursor.rowcount} historicky chybných čísel sérií (>30).")
+
             cursor.execute("""
                 SELECT s.id, s.title, s.tmdb_id, COUNT(e.id) as ep_count, MAX(e.season) as max_s,
                        GROUP_CONCAT(DISTINCT e.season) as seasons_str
@@ -459,13 +485,23 @@ class ArchiveCrawler:
                 has_extreme = any(20 < x < 1900 for x in seasons)
                 is_single = s.get("max_s", 1) <= 1
                 has_tmdb = bool(s.get("tmdb_id"))
+                s1_overflow = len(seasons) > 1 and any(x > 1 for x in seasons)
 
-                if is_single or has_gaps or has_extreme or has_tmdb:
+                needs_align = (
+                    is_single
+                    or has_gaps
+                    or has_extreme
+                    or has_tmdb
+                    or s1_overflow
+                    or not tmdb_service.is_show_aligned(s["id"])
+                )
+
+                if needs_align:
                     res = await tmdb_service.align_show_episodes(s["id"], s.get("tmdb_id"))
                     if res.get("status") == "ok" and res.get("matched", 0) > 0:
                         aligned_count += 1
                         logger.info(f"[{idx}/{total}] Přeindexován seriál {s['title']}: {res['matched']}/{res['total']} dílů do sérií {res['seasons']}.")
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.05)
             except Exception as e:
                 logger.warning(f"Chyba při přeindexování {s.get('id')}: {e}")
 

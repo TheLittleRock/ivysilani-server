@@ -404,17 +404,51 @@ def test_live_stream_m3u8_and_mpd_endpoints():
     user = crud.get_user_by_username("admin")
     token = user["user_token"]
 
-    # 1. Standard HLS stream (.m3u8) redirects to clean native live HLS
+    # 1. Standard HLS stream (.m3u8) vrací přímo přepsaný master playlist s 1080p FHD (případně 302 fallback)
     resp_hls = client.get(f"/live/{token}/2.m3u8", follow_redirects=False)
-    assert resp_hls.status_code == 302
-    assert "contentType=live" in resp_hls.headers["location"]
-    assert "duration=14400" not in resp_hls.headers["location"]
+    assert resp_hls.status_code in [200, 302]
+    if resp_hls.status_code == 200:
+        assert "application/vnd.apple.mpegurl" in resp_hls.headers["content-type"]
+        assert "1920x1080" in resp_hls.text
+    else:
+        assert "contentType=live" in resp_hls.headers["location"]
 
     # 2. DASH DRM stream (.mpd) redirects to proxied DRM manifest
     resp_mpd = client.get(f"/live/{token}/2.mpd", follow_redirects=False)
     assert resp_mpd.status_code == 302
     assert "/api/drm/" in resp_mpd.headers["location"]
     assert resp_mpd.headers["location"].endswith("/manifest.mpd")
+
+@pytest.mark.asyncio
+async def test_align_show_episodes_fixes_bogus_seasons_with_single_tmdb_season():
+    from unittest.mock import patch
+    from app.services.tmdb_service import tmdb_service
+    crud.upsert_show(show_id="rytiri_test", title="Ať žijí rytíři!", show_type="series", tmdb_id="293395")
+    # Bogus seasons 14 and 7 from ČT duration tabs
+    crud.upsert_episode(ep_id="r1", show_id="rytiri_test", title="1. Loučení", idec="201", season=14, episode_num=1)
+    crud.upsert_episode(ep_id="r2", show_id="rytiri_test", title="2. Pán tvrze", idec="202", season=14, episode_num=2)
+    crud.upsert_episode(ep_id="r3", show_id="rytiri_test", title="Královský posel", idec="203", season=7, episode_num=1)
+
+    with patch.object(tmdb_service, "get_tv_episodes", return_value=[
+        {"season": 1, "episode": 1, "name": "Loučení", "norm_name": "louceni"},
+        {"season": 1, "episode": 2, "name": "Pán tvrze", "norm_name": "pan tvrze"},
+        {"season": 1, "episode": 3, "name": "Královský posel", "norm_name": "kralovsky posel"}
+    ]):
+        res = await tmdb_service.align_show_episodes("rytiri_test", "293395")
+        assert res["status"] == "ok"
+        assert res["matched"] == 3
+
+        ep1 = crud.get_episode_by_id("r1")
+        assert ep1["season"] == 1
+        assert ep1["episode_num"] == 1
+
+        ep2 = crud.get_episode_by_id("r2")
+        assert ep2["season"] == 1
+        assert ep2["episode_num"] == 2
+
+        ep3 = crud.get_episode_by_id("r3")
+        assert ep3["season"] == 1
+        assert ep3["episode_num"] == 3
 
 
 

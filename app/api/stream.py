@@ -241,22 +241,25 @@ async def get_hls_master_playlist(
             if has_subtitles:
                 subtitles = [sub_line]
 
+            # Seřazení variant sestupně podle datového toku, aby nejvyšší kvalita (1080p) byla vždy první
+            variants.sort(key=lambda x: x[2], reverse=True)
+
             # Volitelná filtrace podle kvality
             selected_variants = []
             for inf_line, uri_line, bw in variants:
                 keep = True
-                if quality == "1080p" and bw < 5000000:
+                if quality in ["1080p", "fhd"] and bw < 5000000:
                     keep = False
                 elif quality == "720p" and not (2500000 <= bw <= 4500000):
                     keep = False
-                elif quality == "576p" and not (1500000 <= bw <= 2500000):
+                elif quality in ["576p", "540p"] and not (1500000 <= bw <= 2500000):
                     keep = False
 
                 if keep:
                     selected_variants.append((inf_line, uri_line, bw))
 
             if not selected_variants:
-                selected_variants = variants
+                selected_variants = variants[:1] if quality in ["1080p", "fhd"] else variants
 
             # Sestavení čistého master playlistu podle RFC 8216
             out_lines = []

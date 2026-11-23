@@ -153,13 +153,26 @@ ROMAN_NUMERALS = {
 }
 
 def clean_episode_title(raw_title: str) -> Tuple[Optional[int], str]:
-    """Extrahuje číslo epizody z prefixu (např. '1/13 Ztracený případ' -> (1, 'Ztracený případ'))."""
+    """Extrahuje číslo epizody z prefixu (např. '1/13 Ztracený případ', '1. Ztracený případ', 'Díl 1: Ztracený případ')."""
     if not raw_title:
         return None, ""
     clean = raw_title.replace("\xa0", " ").strip()
-    m = re.match(r"^(\d+)/\d+\s+(.+)$", clean)
+    
+    # 1/13 Ztracený případ nebo 1/13 - Ztracený případ
+    m = re.match(r"^(\d+)/\d+\s*[-:]?\s*(.+)$", clean)
     if m:
         return int(m.group(1)), m.group(2).strip()
+    
+    # Díl 1: Ztracený případ nebo Epizoda 1 - Ztracený případ
+    m_exp = re.match(r"^(?:díl|epizoda|část)\s*(\d+)\s*[-:]\s*(.+)$", clean, re.IGNORECASE)
+    if m_exp:
+        return int(m_exp.group(1)), m_exp.group(2).strip()
+
+    # 1. Ztracený případ nebo 1 - Ztracený případ
+    m_dot = re.match(r"^(\d+)\s*[\.\-:]\s+(.+)$", clean)
+    if m_dot:
+        return int(m_dot.group(1)), m_dot.group(2).strip()
+
     return None, clean
 
 def parse_season_number(season_title: str, ep_title: str = "", default: int = 1) -> int:
@@ -170,8 +183,8 @@ def parse_season_number(season_title: str, ep_title: str = "", default: int = 1)
     # 1. Speciály a bonusové materiály -> Série 0
     if any(b in s or b in t for b in ["film o ", "filmy o ", "bonus", "kolem dokola", "videochat", "speciál", "tiskov", "zákulis", "tour"]):
         return 0
-    # 2. Vyprávěj Osudy -> Série 6
-    if "osudy" in s or "osudy" in t:
+    # 2. Vyprávěj Osudy -> Série 6 (když je název řady přímo 'Osudy' nebo je pořad Vyprávěj)
+    if (s == "osudy" or s.startswith("osudy") or "vyprav" in s or "vypráv" in s or "vyprav" in t or "vypráv" in t) and ("osudy" in s or "osudy" in t):
         return 6
     # 3. Číselné označení: '1. řada', '2. série'
     m_num = re.search(r"(\d+)\.\s*(?:řada|série)", s)
@@ -190,10 +203,14 @@ def parse_season_number(season_title: str, ep_title: str = "", default: int = 1)
     if m_yr:
         return int(m_yr.group(1))
 
-    # 7. Odstraníme formáty stopáže a počtu dílů jako '42× 26 minut', '21× 52 minut', '14 dílů'
+    # 7. Odstraníme formáty stopáže, dekády, počty dílů a časové údaje:
+    # např. '42× 26 minut', '21× 52 minut', '14 dílů', '80. léta', '90. léta', 'po 35 letech'
     s_clean = re.sub(r"\d+\s*[×x]\s*\d+\s*minut\w*", " ", s)
     s_clean = re.sub(r"\d+\s*[×x]", " ", s_clean)
-    s_clean = re.sub(r"\d+\s*(?:minut\w*|min\b|díl\w*|epizod\w*|část\w*)", " ", s_clean)
+    s_clean = re.sub(r"\d+\s*(?:minut\w*|min\b|díl\w*|epizod\w*|část\w*|cast\w*)", " ", s_clean)
+    s_clean = re.sub(r"\d+\.?\s*lét\w*", " ", s_clean)
+    s_clean = re.sub(r"po\s*\d+\s*letech", " ", s_clean)
+    s_clean = re.sub(r"\d+\s*let\b", " ", s_clean)
 
     # Základní fallback - pouze pro platná čísla sérií (1 až 30)
     m_basic = re.search(r"\b(\d+)\b", s_clean)
