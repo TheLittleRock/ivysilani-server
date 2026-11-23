@@ -584,9 +584,23 @@ async def handle_stream(request: Request, type: str, id: str, token: Optional[st
         stream_url = f"{base_url}/live/{u_name}/{u_pass}/{s_id}.m3u8"
         streams.append({
             "name": "Česká televize (iVysílání)",
-            "title": f"[ČT] {ch.get('name', 'ČT')} (1080p HLS)",
+            "title": f"[ČT] {ch.get('name', 'ČT')} (1080p HLS Živě)",
             "url": stream_url
         })
+        stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=True)
+        if stream_data and stream_data.get("dash_url"):
+            mpd_url = f"{base_url}/live/{u_name}/{u_pass}/{s_id}.mpd"
+            streams.append({
+                "name": "Česká televize (Widevine DRM)",
+                "title": f"[ČT] {ch.get('name', 'ČT')} (DASH Widevine DRM)",
+                "url": mpd_url,
+                "behaviorHints": {
+                    "drm": {
+                        "type": "widevine",
+                        "licenseUrl": "https://ivys-wvproxy.o2tv.cz/license?access_token=public"
+                    }
+                }
+            })
         return cors_response({"streams": streams})
 
     async def build_stremio_stream_list(idec_code: str, title_label: str) -> list:

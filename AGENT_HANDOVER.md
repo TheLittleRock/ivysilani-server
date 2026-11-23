@@ -8,7 +8,7 @@
 
 ## 1. Základní informace a stav projektu
 
-- **Verze projektu:** `2.3.2` (definována v `app/version.py`)
+- **Verze projektu:** `2.3.3` (definována v `app/version.py`)
 - **Stav:** Plně funkční a nasazeno v produkci
 - **Repozitář:** `https://github.com/TheLittleRock/ivysilani-server.git` (větev `main`)
 - **Lokální cesta:** `/home/ubuntu_laptop/Python/IVysilani`
@@ -68,10 +68,13 @@ flowchart TD
 
 ## 4. Architektura a klíčové subsystémy
 
-### A. Obcházení DRM a HbbTV Fallback Pipeline (`app/services/ct_service.py`)
+### A. Obcházení DRM, Live TV a HbbTV Fallback Pipeline (`app/services/ct_service.py`, `app/services/drm_proxy.py`)
 Česká televize u prémiových pořadů a vybraných živých streamů (např. *StarDance*, filmy vyžadující licenční ochranu) vynucuje Widevine DRM (`encryption == "wv"` nebo `drmOnly=true`).
-- **VOD Pořady:** Server se nejprve pokusí získat unencrypted HbbTV 1080p stream přes HbbTV rozhraní ČT (`type=hbbtv`). Pokud není k dispozici, generuje virtuální lokální DASH MPD manifest patchovaný s PSSH a KID boxy.
-- **Živé vysílání (Live TV DRM Bypass):** Pokud oficiální živý feed hlásí DRM ochranu, server požadavek na `/live/...` transparentně přesměruje na plovoucí unencrypted timeshift okno (`timeshift_url` s parametry `&start={now - 60}&duration=14400`). Tím je zajištěn čistý, unencrypted 1080p HLS stream se zvukem i titulky na všech zařízeních bez červené varovné obrazovky.
+- **VOD Pořady:** Server se nejprve pokusí získat unencrypted HbbTV 1080p stream přes HbbTV rozhraní ČT (`type=hbbtv`). Pokud není k dispozici, generuje virtuální lokální DASH MPD manifest patchovaný s PSSH a KID boxy přes `drm_proxy`.
+- **Živé vysílání (Live TV HLS vs DASH Widevine):**
+  - Běžné živé vysílání na `/live/{token}/{id}.m3u8` využívá nativní živou HLS hranu ČT (`contentType=live&origin=hbbtv`). Původní náhrada za 4hodinový timeshift playlist (`duration=14400`) byla odstraněna, protože obsahovala historické segmenty s DRM varovnou obrazovkou.
+  - Pro pořady, které vyžadují DRM, a pro přehrávače s podporou Widevine (např. Stremio, StreamCube s DRM) server podporuje endpoint `/live/{token}/{id}.mpd`. V takovém případě vytvoří dynamickou live DRM relaci v `drm_session_manager` a proxy manifest `/api/drm/{session_id}/manifest.mpd` s automatickou rotací KID boxů.
+  - Endpoint `/stream/live/{channel_id}` automaticky detekuje playabilitu aktuálního pořadu a volitelně servíruje DASH Widevine relaci nebo přímý HLS stream.
 
 ### B. EPG & Timeshift / Catch-up Scraper (`app/services/epg_service.py`, `app/api/xtream.py`)
 - Scraper pravidelně stahuje kompletní TV program pro všech 14 stanic z `ceskatelevize.cz` v okně 14 dní (dnes ± 7 dní).

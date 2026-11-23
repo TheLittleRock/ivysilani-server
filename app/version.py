@@ -3,8 +3,8 @@
 import subprocess
 from typing import Dict, Any
 
-__version__ = "2.3.2"
-__release_date__ = "2026-11-22"
+__version__ = "2.3.3"
+__release_date__ = "2026-11-23"
 __app_name__ = "iVysílání Server"
 
 def get_git_commit() -> str:

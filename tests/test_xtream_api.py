@@ -400,6 +400,23 @@ async def test_series_info_preserves_tmdb_episode_numbers_when_episodes_missing(
     assert s3_eps[0]["episode_num"] == 6
     assert s3_eps[0]["info"]["episode_num"] == 6
 
+def test_live_stream_m3u8_and_mpd_endpoints():
+    user = crud.get_user_by_username("admin")
+    token = user["user_token"]
+
+    # 1. Standard HLS stream (.m3u8) redirects to clean native live HLS
+    resp_hls = client.get(f"/live/{token}/2.m3u8", follow_redirects=False)
+    assert resp_hls.status_code == 302
+    assert "contentType=live" in resp_hls.headers["location"]
+    assert "duration=14400" not in resp_hls.headers["location"]
+
+    # 2. DASH DRM stream (.mpd) redirects to proxied DRM manifest
+    resp_mpd = client.get(f"/live/{token}/2.mpd", follow_redirects=False)
+    assert resp_mpd.status_code == 302
+    assert "/api/drm/" in resp_mpd.headers["location"]
+    assert resp_mpd.headers["location"].endswith("/manifest.mpd")
+
+
 
 
 

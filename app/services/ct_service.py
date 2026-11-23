@@ -320,11 +320,19 @@ class CTService:
                     if not hls_main and not dash_main and not timeshift_url:
                         return None
 
+                    # Dynamické zjištění, zda právě vysílaný pořad na stanici reálně vyžaduje DRM licenci
                     is_drm = False
-                    if (dash_data.get("streamUrls", {}).get("encryption") == "wv" or 
-                        "drmOnly=true" in (dash_main or "") or 
-                        dash_data.get("streamUrls", {}).get("drmOnly") is True):
-                        is_drm = True
+                    try:
+                        live_epg = await self.get_live_epg_now()
+                        curr_prog = live_epg.get(norm_key, {}).get("current", {})
+                        idec = curr_prog.get("idec")
+                        if idec:
+                            chk_url = f"https://api.ceskatelevize.cz/video/v1/playlist-vod/v1/stream-data/media/external/{idec}?canPlayDrm=false&quality=web&streamType=hls&origin=ivysilani"
+                            chk_resp = await client.get(chk_url)
+                            if chk_resp.status_code == 403:
+                                is_drm = True
+                    except Exception as e:
+                        logger.debug(f"DRM playability check for {norm_key} failed: {e}")
 
                     raw = {
                         "norm_key": norm_key,
@@ -339,26 +347,20 @@ class CTService:
                     }
                     self._cache[f"live_{norm_key}"] = {
                         "raw": raw,
-                        "expiry": time.time() + 300  # Obnova CDN tokenu každých 5 minut
+                        "expiry": time.time() + 60  # Obnova každých 60s kvůli přesné reakci na začátek/konec DRM pořadů
                     }
             except Exception as e:
                 logger.error(f"Error resolving live stream for {norm_key}: {e}")
                 return None
 
-        # Dynamický sliding timeshift window (posledních 60 sekund) zaručuje čistý stream bez červené DRM hlášky
         timeshift_url = raw.get("timeshift_url")
         hls_main = raw.get("hls_main")
         dash_main = raw.get("dash_main")
         is_drm = raw.get("is_drm", False)
 
-        clean_hls = None
-        if timeshift_url:
-            clean_hls = f"{timeshift_url}&start={int(time.time()) - 60}&duration=14400"
-
-        # Pokud je na stanici aktivní DRM (např. StarDance, zahraniční filmy), na hls_main ČT vysílá
-        # varovnou statickou smyčku "Pořad nelze přehrát v tomto prohlížeči". Timeshift endpoint
-        # naproti tomu poskytuje plně nešifrovaný čistý 1080p stream s titulky i vícejazyčným audiem.
-        effective_hls = (clean_hls if is_drm else hls_main) or clean_hls or hls_main
+        # Pro živé vysílání vždy prioritně použijeme čistý nativní live HLS stream (hls_main)
+        # s okamžitým startem a nulovou latencí. Timeshift URL slouží pouze jako nouzový fallback.
+        effective_hls = hls_main or timeshift_url
 
         if allow_drm and is_drm and dash_main:
             chosen_url = dash_main

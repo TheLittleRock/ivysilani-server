@@ -134,11 +134,38 @@ async def get_image_proxy(url: str, pad: Optional[str] = Query(None)):
 
 @router.get("/stream/live/{channel_id}")
 async def get_live_stream_info(request: Request, channel_id: str):
-    data = await ct_service.resolve_live_stream(channel_id, allow_drm=False)
+    data = await ct_service.resolve_live_stream(channel_id, allow_drm=True)
     if not data:
         raise HTTPException(status_code=404, detail="Live stream not found")
 
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", f"127.0.0.1:{settings.PORT}"))
+    base_url = f"{forwarded_proto}://{forwarded_host}"
+
     hls_url = data.get("hls_url") or data.get("url")
+    is_drm = data.get("is_drm", False)
+
+    # Pokud pořad vyžaduje DRM a je k dispozici DASH Widevine, vytvoříme DRM relaci
+    if is_drm and data.get("dash_url"):
+        session_id = drm_session_manager.create_session(
+            source_url=data["dash_url"],
+            user_agent=settings.USER_AGENT,
+            base_url=base_url
+        )
+        return {
+            "channel_id": channel_id,
+            "title": data.get("title", ""),
+            "is_drm": True,
+            "manifest_type": "mpd",
+            "url": f"/api/drm/{session_id}/manifest.mpd",
+            "hls_url": hls_url,
+            "dash_url": data.get("dash_url"),
+            "license_url": "https://ivys-wvproxy.o2tv.cz/license?access_token=public",
+            "qualities": data.get("qualities", []),
+            "audio_tracks": data.get("audio_tracks", []),
+            "subtitles": data.get("subtitles", [])
+        }
+
     return {
         "channel_id": channel_id,
         "title": data.get("title", ""),
@@ -146,6 +173,7 @@ async def get_live_stream_info(request: Request, channel_id: str):
         "manifest_type": "hls",
         "url": hls_url,
         "hls_url": hls_url,
+        "dash_url": data.get("dash_url"),
         "qualities": data.get("qualities", []),
         "audio_tracks": data.get("audio_tracks", []),
         "subtitles": data.get("subtitles", [])

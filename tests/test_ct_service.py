@@ -22,6 +22,16 @@ async def test_resolve_live_stream():
     assert stream_info["channel_id"] == "CH_24"
 
 @pytest.mark.asyncio
+async def test_resolve_live_stream_ct2_native_live():
+    # Verify that live stream for ČT2 uses native live HLS stream (contentType=live) rather than historical timeshift
+    stream_info = await ct_service.resolve_live_stream("CH_2", allow_drm=False)
+    assert stream_info is not None
+    assert stream_info["channel_id"] == "CH_2"
+    assert "contentType=live" in stream_info["hls_url"]
+    assert "duration=14400" not in stream_info["hls_url"]
+    assert stream_info["dash_url"] is not None
+
+@pytest.mark.asyncio
 async def test_resolve_vod_stream_drm_fallback():
     # Bod obnovy (IDEC 21951212035) requires DRM on web profile, but resolves to unencrypted HLS via HbbTV fallback
     stream_info = await ct_service.resolve_vod_stream("21951212035", allow_drm=True)

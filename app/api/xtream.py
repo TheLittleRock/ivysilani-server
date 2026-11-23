@@ -14,6 +14,7 @@ from app.db import crud
 from app.services.ct_service import ct_service, LIVE_CHANNELS
 from app.services.epg_service import generate_xmltv_epg
 from app.services.image_proxy import image_proxy
+from app.services.drm_proxy import drm_session_manager
 
 logger = logging.getLogger("xtream")
 router = APIRouter()
@@ -697,6 +698,18 @@ async def live_stream(
         raise HTTPException(status_code=404, detail="Channel not found")
 
     ch = LIVE_CHANNELS[ch_code]
+
+    # Podpora DASH Widevine DRM streamu při požadavku na .mpd
+    if stream_filename.endswith(".mpd"):
+        stream_data = await ct_service.resolve_live_stream(ch_code, allow_drm=True)
+        if stream_data and stream_data.get("dash_url"):
+            base_url = get_base_url(request)
+            session_id = drm_session_manager.create_session(
+                source_url=stream_data["dash_url"],
+                user_agent=settings.USER_AGENT,
+                base_url=base_url
+            )
+            return RedirectResponse(url=f"{base_url}/api/drm/{session_id}/manifest.mpd", status_code=302)
 
     # Pokud klient žádá timeshift (catchup) přes query parametry (utc, start, lutc)
     req_time = request.query_params.get("utc") or request.query_params.get("start") or request.query_params.get("lutc")

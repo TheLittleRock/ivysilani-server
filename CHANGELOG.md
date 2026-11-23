@@ -6,6 +6,23 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.0.0/) a p
 
 ---
 
+## [2.3.3] - 2026-11-23
+
+### Opraveno (Fixed)
+- **Oprava směrování Live TV streamů a odstranění DRM chybové obrazovky:**
+  - Odstraněna chybná detekce `is_drm = "drmOnly=true" in dash_main`, která byla na kanálech ČT1, ČT2, ČT sport, ČT :D a ČT art permanentně vyhodnocována jako aktivní DRM.
+  - Odstraněno chybné nahrazování živého HLS streamu 4hodinovým statickým timeshift playlistem (`duration=14400`), který obsahoval stovky historických segmentů z dřívějších pořadů s DRM varovným statickým obrazem („Pořad nelze přehrát v tomto prohlížeči. Použijte prohlížeč s podporou DRM“).
+  - Obnoven nativní živý HLS feed (`contentType=live&origin=hbbtv`) pro přehrávání aktuálního vysílání v reálném čase bez zpoždění, vyrovnávací paměti z minulých pořadů a bez červené DRM hlášky.
+  - Zkrácena doba mezipaměti živého vysílání v `get_live_stream` z 300s na 60s pro okamžitou reakci na střídání pořadů.
+
+### Přidáno (Added)
+- **Podpora Live TV Widevine DASH přes DRM Proxy:**
+  - Do `/live/{token}/{stream_filename}` přidána podpora přípony `.mpd`. Pokud klient vyžádá formát `.mpd` (např. `/live/{token}/2.mpd`), server inicializuje live DRM proxy relaci a přesměruje na dynamický lokální MPD manifest.
+  - Endpoint `/stream/live/{channel_id}` automaticky přepíná na Widevine DASH proxy v případě, že je vyžádán DRM stream nebo živý pořad vyžaduje Widevine ochranu.
+  - Do Stremio doplňku přidána volitelná druhá stopa živého vysílání s Widevine DASH DRM pro klienty s nativní podporou DRM přehrávání.
+
+---
+
 ## [2.3.2] - 2026-11-22
 
 ### Opraveno (Fixed)
