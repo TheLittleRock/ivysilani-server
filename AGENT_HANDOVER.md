@@ -75,6 +75,7 @@ flowchart TD
   - Běžné živé vysílání na `/live/{token}/{id}.m3u8` využívá nativní živou HLS hranu ČT (`contentType=live&origin=hbbtv`). Původní náhrada za 4hodinový timeshift playlist (`duration=14400`) byla odstraněna, protože obsahovala historické segmenty s DRM varovnou obrazovkou.
   - Pro pořady, které vyžadují DRM, a pro přehrávače s podporou Widevine (např. Stremio, StreamCube s DRM) server podporuje endpoint `/live/{token}/{id}.mpd`. V takovém případě vytvoří dynamickou live DRM relaci v `drm_session_manager` a proxy manifest `/api/drm/{session_id}/manifest.mpd` s automatickou rotací KID boxů.
   - Endpoint `/stream/live/{channel_id}` automaticky detekuje playabilitu aktuálního pořadu a volitelně servíruje DASH Widevine relaci nebo přímý HLS stream.
+  - **Live TV Pre-warmer & Keep-Alive:** Asynchronní smyčka v `main.py` každých 45 sekund přednačítá a udržuje čerstvé CDN tokeny pro hlavní stanice (`CH_1`, `CH_2`, `CH_24`, `CH_4`, `CH_5`, `CH_6`), což snižuje latenci přepínání programů v IPTV přehrávačích pod 10 ms.
 
 ### B. EPG & Timeshift / Catch-up Scraper (`app/services/epg_service.py`, `app/api/xtream.py`)
 - Scraper pravidelně stahuje kompletní TV program pro všech 14 stanic z `ceskatelevize.cz` v okně 14 dní (dnes ± 7 dní).

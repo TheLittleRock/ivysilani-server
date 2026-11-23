@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from app.services.ct_service import ct_service, LIVE_CHANNELS
+from app.services.ct_service import ct_service, LIVE_CHANNELS, parse_season_number
 
 @pytest.mark.asyncio
 async def test_live_channels_definitions():
@@ -48,6 +48,18 @@ def test_parse_season_number():
     assert parse_season_number("StarDance XIV (2026)") == 14
     assert parse_season_number("42× 26 minut", default=1) == 1
     assert parse_season_number("21× 52 minut", default=1) == 1
+
+@pytest.mark.asyncio
+async def test_prewarm_live_streams():
+    status = await ct_service.prewarm_live_streams(["CH_1", "CH_24"])
+    assert "CH_1" in status
+    assert "CH_24" in status
+    assert status["CH_1"] is True
+    assert status["CH_24"] is True
+    # Verify cache is populated
+    cached_ct1 = ct_service._cache.get("live_CH_1")
+    assert cached_ct1 is not None
+    assert cached_ct1["expiry"] > 0
     assert parse_season_number("14 dílů", default=1) == 1
     assert parse_season_number("V. řada") == 5
 

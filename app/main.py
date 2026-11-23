@@ -15,6 +15,7 @@ from app.db.database import init_db
 from app.services.downloader import download_manager
 from app.services.archive_crawler import archive_crawler
 from app.services.epg_service import run_periodic_epg
+from app.services.ct_service import ct_service
 from app.api.web import router as web_router
 from app.api.xtream import router as xtream_router
 from app.api.stream import router as stream_router
@@ -38,9 +39,13 @@ async def lifespan(app: FastAPI):
     logger.info("Spouštění stahování EPG dat na pozadí...")
     epg_task = asyncio.create_task(run_periodic_epg())
     
+    logger.info("Spouštění Live TV Pre-warmeru na pozadí...")
+    prewarmer_task = asyncio.create_task(ct_service.run_live_prewarmer(interval_seconds=45))
+    
     yield
     
     logger.info("Ukončování služeb...")
+    prewarmer_task.cancel()
     crawler_task.cancel()
     epg_task.cancel()
     await download_manager.stop()
